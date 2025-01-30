@@ -1,0 +1,35 @@
+{
+  "name": "nocta",
+  "description": "A reactive lightweight TS framework.",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "types/index.d.ts"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zzzeros0/nocta.git"
+  },
+  "keywords": [
+    "framework",
+    "web",
+    "web-components",
+    "html",
+    "ui",
+    "front-end",
+    "frontend",
+    "typescript",
+    "nocta"
+  ],
+  "author": "zzzeros0",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
