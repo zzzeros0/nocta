@@ -431,16 +431,23 @@ function diff<T extends Nocta.AnyNode>(node: T, target: T) {
   }
 }
 function renderChild(node: Nocta.Parent | Nocta.Tag | Nocta.Fragment) {
-  let idxof = isFragmentNode(node) ? node.indexOf : 0;
-  if (node.children.length)
+  if (node.children.length) {
+    let idxof = isFragmentNode(node) ? node.indexOf : 0;
+    let lastNode: undefined | Nocta.AnyNode = undefined;
     for (const c of node.children) {
       if (c) {
-        if (!isParentNode(c)) c.indexOf = idxof;
+        if (!isParentNode(c)) {
+          if (lastNode && isFragmentNode(lastNode)) {
+            c.indexOf = lastNode.indexOf + lastNode.children.length;
+          } else c.indexOf = idxof;
+        }
         relateChild(node, c);
         render(c);
-      }
+        lastNode = c;
+      } else lastNode = undefined;
       idxof++;
     }
+  }
 }
 function render(node: Nocta.AnyNode) {
   if (isParentNode(node) || isFragmentNode(node)) {
