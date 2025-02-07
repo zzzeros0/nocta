@@ -44,6 +44,7 @@ class Capacitor<T> implements Nocta.Capacitor<T> {
   public reset() {
     if (this.generator) this.generator = null;
     this.store.length = 0;
+    this._closed = false;
   }
 }
 const NODE_TYPE_PARENT: Nocta.NodeType.Parent = -1;
@@ -412,6 +413,7 @@ function diff<T extends Nocta.AnyNode>(node: T, target: T) {
     }
     const _target = target as Nocta.Component;
     node.props = _target.props;
+    if (node.component !== _target.component) clearReactivity(node);
     node.component = _target.component;
 
     const virtual = generateComponent(node);
