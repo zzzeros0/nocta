@@ -388,6 +388,7 @@ function diff<T extends Nocta.AnyNode>(node: T, target: T) {
   } else if (isTagNode(node)) {
     const _target = target as Nocta.Tag;
     diffProps(node, _target);
+    diffChild(node, _target);
     if (node.tag !== _target.tag && node.dom) {
       node.tag = _target.tag;
       if (node.dom.isConnected) {
@@ -398,7 +399,6 @@ function diff<T extends Nocta.AnyNode>(node: T, target: T) {
         clear(node);
       }
     }
-    diffChild(node, _target);
     node.props = _target.props;
   } else if (isContentNode(node)) {
     const _target = target as Nocta.Content;
@@ -438,16 +438,27 @@ function renderChild(node: Nocta.Parent | Nocta.Tag | Nocta.Fragment) {
       if (c) {
         if (!isParentNode(c)) {
           if (lastNode && isFragmentNode(lastNode)) {
-            c.indexOf = lastNode.indexOf + lastNode.children.length;
+            c.indexOf =
+              lastNode.indexOf +
+              lastNode.children.filter((c) => c !== null).length;
           } else c.indexOf = idxof;
         }
         relateChild(node, c);
         render(c);
         lastNode = c;
+        idxof++;
       } else lastNode = undefined;
-      idxof++;
     }
   }
+}
+function attach(node: Nocta.Tag | Nocta.Content) {
+  if (!node.dom) return;
+  const parent = getRoot(node);
+  if (!parent) throw new Error("Parent is null");
+  if (node.indexOf !== 0) {
+    if (node.indexOf > parent.childNodes.length) parent.appendChild(node.dom);
+    else parent.insertBefore(node.dom, parent.childNodes[node.indexOf]);
+  } else parent.appendChild(node.dom);
 }
 function render(node: Nocta.AnyNode) {
   if (isParentNode(node) || isFragmentNode(node)) {
@@ -455,30 +466,26 @@ function render(node: Nocta.AnyNode) {
   } else if (isContentNode(node)) {
     if (node.dom) {
       node.dom.nodeValue = node.content;
+      if (!node.dom.isConnected) {
+        attach(node);
+      }
       return;
     }
     node.dom = document.createTextNode(node.content);
-    const parent = getRoot(node);
-    if (!parent) throw new Error("Parent is null");
-    if (node.indexOf !== 0) {
-      if (node.indexOf > parent.childNodes.length) parent.appendChild(node.dom);
-      else parent.insertBefore(node.dom, parent.childNodes[node.indexOf]);
-    } else parent.appendChild(node.dom);
+    attach(node);
   } else if (isTagNode(node)) {
     if (node.dom) {
       applyProps(node);
       renderChild(node);
+      if (!node.dom.isConnected) {
+        attach(node);
+      }
       return;
     }
     node.dom = document.createElement(node.tag);
     applyProps(node);
     renderChild(node);
-    const parent = getRoot(node);
-    if (!parent) throw new Error("Parent is null");
-    if (node.indexOf !== 0) {
-      if (node.indexOf > parent.childNodes.length) parent.appendChild(node.dom);
-      else parent.insertBefore(node.dom, parent.childNodes[node.indexOf]);
-    } else parent.appendChild(node.dom);
+    attach(node);
   } else if (isComponentNode(node)) {
     if (node.virtual) {
       render(node.virtual);
