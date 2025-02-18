@@ -370,6 +370,8 @@ function applyProps(node: Nocta.Tag) {
     } else if (k === "className") {
       const name = Reflect.get(node.props, k);
       node.dom.className = name ? name : "";
+    } else if (k === "value") {
+      Reflect.set(node.dom, k, Reflect.get(node.props, k));
     } else {
       const v = Reflect.get(node.props, k);
       if (typeof v === "boolean") {

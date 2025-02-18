@@ -67,13 +67,13 @@ declare namespace Nocta {
     | "lastElementChild"
     | "innerHTML"
     | "outerHTML"
-    | "ContentContent"
     | "innerContent"
     | `DOCUMENT_${string}`
     | "NOTATION_NODE"
     | "PROCESSING_INSTRUCTION_NODE"
-    | "Content_NODE"
+    | "CONTENT_NODE"
     | "ELEMENT_NODE"
+    | "TEXT_NODE"
     | `ENTITY_${string}`;
   interface ElementOverridedProperties {
     style?: Styles;
