@@ -1,25 +1,28 @@
 # Nocta
 
-Nocta is a small and lightweight typescript library that eases the creation of small to complex user interfaces.
+Nocta is a small and reactive lightweight typescript library that eases the creation of small to complex user interfaces.
 
 - Nocta is function based.
 
-- Nocta works with "Nodes". Each node can represent an HTML Element (Tag) or a bunch of them (Fragments); a reactive Element (Component), text Elements (Content) or a root Element (Parent).
+- Nocta works with "Nodes".
 
 ## Table of Contents
 
 - [Installation](#installation)
-- [Usage](#usage)
+- [Introduction](#introduction)
   - [Tag](#tag)
   - [Content](#content)
   - [Fragment](#fragment)
-  - [Component](#component)
+  - [Templates and Components](#templates-and-components)
   - [Parent](#parent)
+- [Usage](#usage)
   - [Creating Components](#creating-components)
-  - [Rendering Components](#rendering-components)
-  - [Difference between Forwarder and Component](#difference-between-forwarder-and-component)
+  - [Rendering Nodes](#rendering-nodes)
+  - [Difference between Template and Component](#difference-between-template-and-component)
   - [State](#state)
   - [Effect](#effect)
+  - [Memory](#memory)
+  - [Context](#context)
 
 ## Installation
 
@@ -29,9 +32,9 @@ Add this package to your npm project:
 npm install nocta
 ```
 
-## Usage
+## Introduction
 
-Nocta allows you to develop UI by providing 5 types of `nodes`:
+Nocta allows you to develop UI by providing 5 types of `nodes`.
 
 ### Tag
 
@@ -40,22 +43,19 @@ An HTML Element.
 ```ts
 import { Tag } from "nocta";
 
-const myDiv: Nocta.Tag<"div"> = Tag("div");
+Tag("div"); // Nocta.Tag<"div">
 // When painted: <div></div>
 
-const myDivWithId: Nocta.Tag<"div"> = Tag("div", { id: "123" });
+Tag("div", { id: "123" }); // Nocta.Tag<"div">
 // When painted: <div id="123"></div>
 
-const myButtonWithIdAndChild: Nocta.Tag<"button"> = Tag(
-  "button",
-  { id: "123" },
-  [Tag("strong", [Content("I'm")]), Content(" the text inside the button!")]
-);
+Tag("button", { id: "123" }, [
+  Tag("strong", [Content("I'm")]),
+  Content(" the text inside the button!"),
+]); // Nocta.Tag<"button">
 // When painted: <button id="123"><strong>I'm</strong> the text inside the button!</button>
 
-const myButtonWithChild: Nocta.Tag<"button"> = Tag("button", [
-  Content("This button received no props!"),
-]);
+Tag("button", [Content("This button received no props!")]); // Nocta.Tag<"button">
 // When painted: <button>"This button received no props!</button>
 ```
 
@@ -66,7 +66,7 @@ An HTML text.
 ```ts
 import { Content } from "nocta";
 
-const htmlText: Nocta.Content = Content("I'm the text node");
+Content("I'm the text node"); // Nocta.Content
 ```
 
 ### Fragment
@@ -76,49 +76,49 @@ A container of multiple children.
 ```ts
 import { Fragment } from "nocta";
 
-const myFragment: Nocta.Fragment = Fragment(
-  Tag("div"),
-  Tag("button"),
-  Content("HTML Text")
-);
+Fragment(Tag("div"), Tag("button"), Content("HTML Text")); // Nocta.Fragment
 // When painted: <><div></div><button></button>HTML Text</>
 ```
 
-### Component
+### Templates and Components
 
-A reactive node. This kind of node has 2 main characteristics:
+`Templates` are functions that return a node (or null).
+`Components` make use of `Templates` to provide reactivity.
 
-- It can be used as a node `Forwarder`.
-- It can be used as a `Component`.
+Defining templates:
 
 ```ts
-import { Component, Tag, Content } from "nocta";
+import { Tag, Content } from "nocta";
 
-const myForwarderNode: Nocta.Forwarder<Nocta.Tag<"div">> = function () {
+const myTemplateNode: Nocta.Template<Nocta.Tag<"div">> = () => {
   return Tag("div", [Tag("button", [Content("I'm the text in the button")])]);
 };
-// myForwarderNode is a node Forwarder: a function that returns a node.
+// myTemplateNode is a node Template: a function that returns a node.
 // This function must return a Tag "div"
 
-// Defining custom props:
-const myForwarderNode: Nocta.Forwarder<
+// Defining Templates custom props:
+const myTemplateNode: Nocta.Template<
   Nocta.Tag<"div">,
   { customProp: string }
 > = function ({customProp}) {
   ...
 };
-
-// Defining a Component node
-const myComponent = Component(myForwarderNode);
-
-// If the node Forwarder function needs props, pass the arguments to Component:
-const myComponentWithProps = Component(myComponentFunction, {
-  customProp: "string",
-});
-
-// Both approaches will produce the same paint. The difference is in the reactivity.
-// Learn more in Difference between Forwarder and Component
 ```
+
+Defining components:
+
+```ts
+import { Component } from "nocta";
+// Passing this template to a Component will create a Component node.
+Component(myTemplateNode); // Nocta.Component
+
+// If the node Template function needs props, pass the arguments to Component:
+Component(myComponentFunction, {
+  customProp: "string",
+}); // Nocta.Component<Nocta.AnyValidNode, { customProp: string }>
+```
+
+So, a `Template` can be seen as the node that will be returned, and a `Component` is a node that will use the `Template` to generate it's inner `node` and will provide an `execution context` for it's reactivity.
 
 ### Parent
 
@@ -127,7 +127,7 @@ A root element that holds children. It serves as the entry point for your UI, as
 ```ts
 import { Parent } from "nocta";
 
-const parent = Parent(document.querySelector("#root"), Tag("h1"));
+Parent(document.querySelector("#root")!, Tag("h1")); // Nocta.Parent
 // if html body is:
 // <body><div id="root"></div></body>
 // When painted:
@@ -136,64 +136,83 @@ const parent = Parent(document.querySelector("#root"), Tag("h1"));
 
 ---
 
-### Creating Components
+## Usage
 
-Components make use of functional nodes. A function that returns a node (or null) is a `Forwarder`. Let's define its type:
+Nodes are not intended to be stored in variables as they are dinamically changing. Storing them can produce memory leaks or unexpected behaviour. They are intended to be created at runtime and passed directly.
+
+Mainly, when working with nodes, the main entry points are `Templates` and `Components`.
 
 ```ts
-const myForwarderNode: Nocta.Forwarder<
-  Nocta.Tag<"button">,
+const App = () => {
+  // Return the nodes you want.
+  return Tag("button", [Content("I'm a button")]);
+};
+
+renderNodes(document.body!, Component(App)); // Call 'Component' on the 'Template'
+
+// Or
+
+renderNodes(document.body!, App()); // Use the 'Template' itself if it doesn't need an 'execution context'
+```
+
+### Creating Components
+
+Components make use of `Templates`. A function that returns a node (or null) is a `Template`. Let's define its type:
+
+```ts
+const myTemplateNode: Nocta.Template<
+  Nocta.Tag<"button">, // The type that will be returned
   {
     prop1: string;
     prop2: number;
-  }
+  } // Props definition
 >;
 ```
 
-`Nocta.Forwarder` generic defines a function that returns a node (Tag, Content, Fragment...) or null.
+`Nocta.Template` generic defines a function that returns a node (Tag, Content, Fragment...) or null.
 In the given example, the function must return `Nocta.Tag<"button">`.
 This generic also defines the props the component will receive. Let's define the function:
 
 ```ts
 import { Tag, Content } from "nocta";
 
-const myForwarderNode: Nocta.Forwarder<
+const myTemplateNode: Nocta.Template<
   Nocta.Tag<"button">,
   {
     prop1: string;
     prop2: number;
   }
-> = function ({ prop1, prop2 }) {
+> = ({ prop1, prop2 }) => {
   console.log("Prop 1", prop1, "Prop 2", prop2);
-  return Tag("button", [Content("Im a text")]);
+  return Tag("button", [Content("Im a button")]);
 };
 ```
 
-The `Forwarder` function is then used to generate a `Component` node using `Component`:
+The `Template` function is then used to generate a `Component` node using `Component`. `Components` create an execution context for the template to use its reactivity:
 
 ```ts
 import { Component } from "nocta";
 
-const myComponentNode = Component(myForwarderNode, {
+Component(myTemplateNode, {
   prop1: "1",
   prop2: 1,
-});
+}); // Nocta.Component<Nocta.Tag<"button">, { prop1: number, prop2: string }>
 ```
 
-### Rendering Components
+### Rendering Nodes
 
-`renderNodes` is used to paint any node. This is your app entry point and this must be called once over the node. Once it's painted, it's lifecycle is managed by the node itself.
+`renderNodes` is used to paint nodes. This is your app entry point and this must be called once over the node. Once it's painted, it's lifecycle is managed by the node itself.
 
 ```ts
 renderNodes(document.body, Tag("div"));
 renderNodes(document.body, Fragment(Tag("div")));
 renderNodes(document.body, Content("Text"));
-renderNodes(document.body, myForwarderNode());
-renderNodes(document.body, Component(myForwarderNode));
+renderNodes(document.body, myTemplateNode());
+renderNodes(document.body, Component(myTemplateNode));
 renderNodes(document.body, Parent(document.body));
 ```
 
-If you're going to render more than one node over the same root HTMLElement, use them in the same call (they will be rendered in the order they are defined):
+If you're going to render more than one node over the same root HTMLElement, pass them in the same call (they will be rendered in the order they are defined):
 
 ```ts
 renderNodes(document.body, Tag("div"), Tag("button"),...);
@@ -204,86 +223,90 @@ renderNodes(document.body, Tag("div"), Tag("button"),...);
 ```ts
 const parent: Nocta.Parent = renderNodes(
   document.body,
-  Component(myForwarderNode)
+  Component(myTemplateNode)
 );
 ```
 
-### Difference between Forwarder and Component
+**Note: `renderNodes` will render the nodes in the next `event loop` (`async`). `Sync` code after calling `renderNodes` will be executed before they are rendered.**
 
-There are some important characteristics that differentiate `Forwarders` and `Components`.
+### Difference between Template and Component
 
-`Forwarders` can be used as reutilizable pieces. They do not have their own `execution context`, so the reactivity generated inside of them will be linked to the nearest component execution context.
+There are some important characteristics that differentiate `Templates` and `Components`.
 
-`Components`, on the other hand, creates an `execution context`, enabling state and reactivity.
+`Templates` are used as reutilizable pieces. They do not have their own `execution context`, so the reactivity generated inside of them will be linked to the nearest component execution context.
 
-So, we can define `Forwarders` as templates, and `Components` as the node that uses that template and generates its reactivity .
+`Components`, on the other hand, create an `execution context`, enabling reactivity (state, memory, effects, context consumption...).
+
+So, we can define `Templates` as reusable node templates, and `Components` as the runtime node that uses that template and provides its reactivity.
 
 ```ts
 import { Fragment, Tag, Content, state } from "nocta";
 
-const myOtherForwarderNode: Nocta.Forwarder<Nocta.Tag<"div">> = function () {
+const myOtherTemplateNode: Nocta.Template<Nocta.Tag<"div">> = () => {
   const [message, setMessage] = state<string>("");
   return Tag("div", [Content(message)]);
 };
-const myForwarderNode: Nocta.Forwarder<
+const myTemplateNode: Nocta.Template<
   Nocta.Fragment,
   {
     prop1: string;
     prop2: number;
   }
-> = function () {
+> = () => {
   const [counter, setCounter] = state<number>(0);
   return Fragment(
     Tag("button", [Content("I'm a button")]),
-    myOtherForwarderNode()
+    myOtherTemplateNode()
   );
 };
 
-renderNodes(document.body, Component(myForwarderNode));
+renderNodes(document.body, Component(myTemplateNode));
 ```
 
-In this example, only `myForwarderNode` is generated as a `Component`: `myOtherForwarderNode`'s states will be linked to this context. This means, that calling an state update inside of `myOtherForwarderNode` will perform an update in the execution context (`myForwarderNode`).
+In this example, only `myTemplateNode` is generated as a `Component`: `myOtherTemplateNode`'s states will be linked to this context. This means, that calling an state update inside of `myOtherTemplateNode` will perform an update in the execution context (`myTemplateNode`).
 
 ```ts
 import { Fragment, Tag, Content, state } from "nocta";
 
-const myOtherForwarderNode: Nocta.Forwarder<Nocta.Tag<"div">> = function () {
+const myOtherTemplateNode: Nocta.Template<Nocta.Tag<"div">> = () => {
   const [message, setMessage] = state<string>("");
   return Tag("div", [Content(message)]);
 };
-const myForwarderNode: Nocta.Forwarder<
+const myTemplateNode: Nocta.Template<
   Nocta.Fragment,
   {
     prop1: string;
     prop2: number;
   }
-> = function () {
+> = () => {
   const [counter, setCounter] = state<number>(0);
   return Fragment(
     Tag("button", [Content("I'm a button")]),
-    Component(myOtherForwarderNode)
+    Component(myOtherTemplateNode)
   );
 };
 
-renderNodes(document.body, Component(myForwarderNode));
+renderNodes(document.body, Component(myTemplateNode));
 ```
 
-In this example, we have wrapped `myOtherForwarderNode` inside a `Component`, meaning that performing calling `setMessage` will only repaint `myOtherForwarderNode`.
+In this example, we have wrapped `myOtherTemplateNode` inside a `Component`, meaning that calling `setMessage` will only repaint `myOtherTemplateNode`.
 
-This allows to choose whether it is reactive on its own or not.
+This allows you to choose how components should react to changes.
+
+**Important: don't forget that when a `Component` (or `Template`) is updated, all it's children will be updated too.**
 
 ##### ¿What is a execution context?
 
 When a `Component` tree is generated, a `execution context` (the `Component`) is created and is accessible to all the subtree nodes unless another `Component` is generated. Once the tree is generated, the context is exited.
 
-Nocta provides the reactivity inside of `Components` by the use of `states, effects, memory and contexts (shared states)` that are joined to the the `execution context`.
+Nocta provides the reactivity inside of `Components` by the use of `states, effects, memory and contexts` that are joined to the the `execution context`.
 
-First let's define a node `Forwarder`. Let's make a simple button counter that increases the counter when clicked:
+First let's define a node `Template`. Let's make a simple button counter that increases the counter when clicked:
 
 ```ts
 import { Component, Tag, Content, state } from "nocta";
 
-const myForwarderNode: Nocta.Forwarder<Nocta.Tag<"button">> = function () {
+const myTemplateNode: Nocta.Template<Nocta.Tag<"button">> = () => {
   const [buttonCounter, setButtonCounter] = state<number>(0);
 
   return Tag(
@@ -302,10 +325,10 @@ const myForwarderNode: Nocta.Forwarder<Nocta.Tag<"button">> = function () {
   );
 };
 
-renderNodes(document.body, myForwarderNode());
+renderNodes(document.body, myTemplateNode());
 ```
 
-If we run this without wrapping `myForwarderNode` inside `Component`, `states or effects` will be linked to the `nearest execution context (if exists)`. In this example, we don't have a `running context`; this will fail with an error: `Execution context is null`.
+If we run this without wrapping `myTemplateNode` inside `Component`, `states or effects` will be linked to the `nearest execution context (if exists)`. In this example, we don't have a `running context`; this will fail with an error: `Execution context is null`.
 
 Don't forget that creating a new `Component` node inside a `Component` will change the `running context` and children will be linked to this last created context, until is exited.
 
@@ -316,7 +339,7 @@ The `state` allows to define values that exist in the component's life cycle and
 States are created with the `state` function. This returns and array with `getter` and `setter`, like `React`. A component has no state limits.
 
 ```ts
-const myForwarderNode = function () {
+const myTemplateNode = () => {
   const [userNeedsLogin, setUserNeedsLogin] = state<boolean>(false);
   const [user, setUser] = state<string>();
   ...
@@ -334,7 +357,7 @@ const myForwarderNode = function () {
 Inside a component, accessing to the state after performing a state update will reflect the new value:
 
 ```ts
-const myForwarderNode = function () {
+const myTemplateNode = () => {
   const [now, setNow] = state<Date>(new Date(0));
 
   return Tag("button", {
@@ -354,12 +377,12 @@ Important: When a component updates its state, the repaint is managed automatica
 An `effect` is a callback that gets executed when the node gets painted. This callback can return another one, that will get executed when the element is unpainted.
 An element can have multiple effects.
 
-An effect is intended to be used when there is async work to do or state updates that need to be fired after painted.
+An effect is intended to be used when there is async work to do or actions that have to be fired after render.
 
 ```ts
 import { Tag, effect } from "nocta";
 
-const myForwarderNode = function () {
+const myTemplateNode = () => {
   effect(() => {
     console.log("I will get executed when painted");
 
@@ -384,8 +407,6 @@ const myForwarderNode = function () {
 };
 ```
 
-States trigger a re-update of the `Component`, causing the `Forwarder` to execute again. Then, after a state update, the cleanup functions of previous effects are executed and the nodes get painted again. When repaint, the effects run again.
-
 Note: Effects will be executed in the order they are defined (FIFO).
 
 #### Handeling effects
@@ -395,7 +416,7 @@ Effects, unlike states, can be defined conditionally:
 ```ts
 import { Tag, effect } from "nocta";
 
-const myForwarderNode = function () {
+const myTemplateNode = () => {
   const [counter, setCounter] = state<number>(0);
   // Only run the effect if number is even
   if (counter() % 2 === 0)
@@ -411,33 +432,39 @@ const myForwarderNode = function () {
 };
 ```
 
+Also performing state updates will perform an execution of the effects. You have to handle the execution flow and `memory` can help with that.
+
 ### Memory
 
-`Memory` allows you to store values during the component's lifecycle. Unlike states, changes in memory will not perform a repaint.
+`Memory` allows you to store values during the component's lifecycle. Unlike states, changes in memory will not perform a repaint. It returns a `Holder<T>`:
 
 ```ts
 import { Tag, memory } from "nocta";
 
-const myComponentFunction = function () {
-  const loginMemory = memory<{
-    loginAttempts: number;
-  }>();
-
+const myButtonMemory = () => {
+  const loginAttempts = memory<number>(0);
+  const userFetched = memory<boolean>(false);
+  const userData = memory<{
+    user_id: string;
+  }>({
+    user_id: "",
+  });
   return Tag("button", {
     onclick(v) {
-      loginMemory.holded.loginAttempts++;
-      // This won't procude a repaint
+      loginMemory.holded++;
+      userFetched.holded = false;
+      // This actions won't procude a repaint
     },
   });
 };
 ```
 
-Memory can be used to control the node's lifecycle logic. For example, it can be used to choose wether an effect should be run or not:
+Memory can be used to control the `node's lifecycle logic`. For example, it can be used to choose wether an effect should run or not:
 
 ```ts
 import { Tag, memory, effect } from "nocta";
 
-const myComponentFunction = function () {
+const myButtonEffectWithMemory = () => {
   const loginMemory = memory<{
     loginAttempts: number;
     userRefreshed: boolean;
@@ -446,6 +473,8 @@ const myComponentFunction = function () {
   effect(() => {
     if (loginMemory.holded.loginAttempts > 2) {
       // Do something
+      // Don't forget that changing a memory value won't produce a repaint
+      // An state update would be neccessary in this case
     }
   });
   effect(() => {
@@ -454,7 +483,7 @@ const myComponentFunction = function () {
       // Refresh user
       // If an state update runs later
       // Next render effect execution won't
-      // get here, because userRefreshed is true
+      // get here: userRefreshed is true
     }
   });
   return Tag("button", {
@@ -468,46 +497,117 @@ const myComponentFunction = function () {
 
 ### Context
 
-`Context` ease the sharing of states between `Forwarders`.
+`Context` ease the sharing of data between `Components`.
 
-Creating a context:
+A context is defined by a class that extends `ContextLinker` and implements the context interface. This class is then used as a `Context template`.
 
 ```ts
-import { createContext } from "nocta";
+import { context, ContextLinker } from "nocta";
 
-const userContext = createContext<{
-  username: string;
-  password: string;
-  setUser: (name: string, pwd: string) => void;
-}>();
+interface CounterContext {
+  counter: number;
+  increase(): void;
+  decrease(): void;
+}
+
+class CounterContextTemplate extends ContextLinker implements CounterContext {
+  public counter = 0;
+  public increase() {
+    this.counter++;
+    this.update();
+  }
+  public decrease() {
+    this.counter--;
+    this.update();
+  }
+}
 ```
 
-And `define` the context in the provider `Forwarder`:
+This defines the structure of the context.
+`update` is provided by the extension from `ContextLinker` and it performs an update of all the consumers consuming this context; this lets you decide when components should update.
+
+To be able to access this context from the components, you must create a `ContextLinker` using `contextLinker`:
 
 ```ts
-const myContextForwarder = function () {
-  const [userName, setUserName] = state<string>();
-  const [password, setPassword] = state<string>();
+import { contextLinker } from "nocta";
 
-  // Values inside a context that come from states
-  // can be passed as the value itself since
-  // next repaint will over-write the context
-  // with the new state
-  userContext.define({
-    user: userName(),
-    password: password(),
-    setUser (user,pwd) {
-        setUserName(user)
-        setPassword(pwd)
-    }
-  });
+const counterContextLinker = contextLinker<CounterContext>();
+```
 
-  return ...;
+This is where the `Context template` will be generated and stored.
+
+Before the components consume this context, it has to be populated with `provide`. This generates the context using the template class and it gets linked to the `ContextLinker`.
+
+```ts
+import { provide } from "nocta";
+const App = () => {
+  provide(CounterContextTemplate, counterContextLinker);
+  return Component(counterConsumerTemplate);
 };
 ```
 
-The context will be defined when the tree is generated. It's not necessary for the `Forwarder` to be a child of it to have access, but if consumer is not a child of the provider, it won't react to the states updates since it's outside the tree.
+Then a component can use `consume`:
 
-### Disclaimer
+```ts
+import { consume } from "nocta";
+const counterConsumerTemplate = () => {
+  const counterContext = consume(counterContextLinker);
+  return Content(`The counter is ${counterContext.counter}`);
+};
+```
 
-This project appears as a personal learning work and is not intended to be commercially used.
+As `states`, context `consumers` need an `execution context`. They have to be wrapped inside of a `Component`. If they're not wrapped, they will be linked to the nearest execution context or `throw an error if there is not one`. There's no need of an `execution context` to `provide` a context.
+
+A context linker can be cleared using `clearLinker`. This can be called when a `ContextLinker` will no longer be used (if it is used later, you will need to call `provide` again before using it).
+
+`ContextLinker` can be defined anywhere. You can use them even inside of templates (you must handle the context destruction):
+
+```ts
+import {
+  provide,
+  consume,
+  contextLinker,
+  Content,
+  Component,
+  renderNodes,
+} from "nocta";
+
+const counterConsumerTemplate: Nocta.Template<
+  Nocta.Tag<"div">,
+  { counterLinker: Nocta.ContextLinker<CounterContext> }
+> = () => {
+  const counterContext = consume(counterContextLinker);
+  return Tag("div", [
+    Tag(
+      "button",
+      {
+        onclick() {
+          counterContext.increase();
+        },
+      },
+      [Content("Increase")]
+    ),
+    Tag(
+      "button",
+      {
+        onclick() {
+          counterContext.decrease();
+        },
+      },
+      [Content("Decrease")]
+    ),
+    Content(`The counter is ${counterContext.counter}`),
+  ]);
+};
+const App = () => {
+  const counterContextLinker = contextLinker<CounterContext>();
+  provide(CounterContextTemplate, counterContextLinker);
+  effect(() => {
+    return () => {
+      clearLinker(counterContextLinker); // Destroy the linker when this component unmounts
+    };
+  });
+  return Component(counterConsumerTemplate, { counterLinker });
+};
+renderNodes(document.body!, Component(App));
+```

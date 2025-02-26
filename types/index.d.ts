@@ -15,20 +15,12 @@ declare namespace Nocta {
   type StateEffectSuscriber<T> = (eff: StateEffect<T>) => void;
   type State<T> = [get: StateGetter<T>, set: StateSetter<T>];
   type Effect = () => void | (() => void);
-  type StateWithEffect<T> = [
-    get: StateGetter<T>,
-    set: StateSetter<T>,
-    effect: StateEffectSuscriber<T>
-  ];
+
   interface Holder<T> {
     holded: T;
   }
   interface StateContainer<T = any> extends Holder<T> {
     effect: StateEffect<T> | null;
-  }
-  interface Context<T> {
-    consume(): T;
-    define(ctxValue: T): void;
   }
   type HTMLTags = keyof HTMLElementTagNameMap;
   type Element<T extends HTMLTags> = HTMLElementTagNameMap[T];
@@ -98,36 +90,53 @@ declare namespace Nocta {
     | NodeType.Tag
     | NodeType.Content
     | NodeType.Component;
-  type ComponentProps = { [key: string]: any };
-
-  type AnyNode = Parent | Fragment | Tag | Content | Component;
+  type KeyedObject = Record<string | symbol | number, any>;
+  type ComponentProps = KeyedObject;
+  type AnyComponent = Component | Component<AnyValidNode, any>;
+  type AnyNode = Parent | Fragment | Tag | Content | AnyComponent;
+  type AnyValidNode = AnyNode | null;
   type AnyNodeExceptParent = Fragment | Tag | Content | Component;
-  type NodeChildren = (AnyNode | null)[];
+  type NodeChildren = AnyValidNode[];
   type ChildrenProps = { children: NodeChildren };
+  type ContextLinkerFlag = 0 | 1 | 2;
+  interface ContextLinker<T extends Nocta.KeyedObject> {
+    get consumers(): Map<symbol, Nocta.AnyComponent>;
+    get flag(): ContextLinkerFlag;
+    set flag(f: ContextLinkerFlag);
+    get data(): Holder<T>;
+    set data(nd: T);
+  }
   interface ReactiveCapacitors {
-    state: Capacitor<StateContainer<any>>;
+    state: Capacitor<Holder<any>>;
     effect: Capacitor<Effect>;
     cleanUp: Capacitor<VoidFunction>;
     memory: Capacitor<Holder<any>>;
+    links: Set<ContextLinker<any>>;
+  }
+  interface Context<T extends Nocta.KeyedObject = Nocta.KeyedObject> {
+    readonly ctxs: Map<symbol, Nocta.Holder<T>>;
   }
   interface DomElement<T extends HTMLElement | Text = HTMLElement> {
     dom: null | T;
   }
-  interface VirtualElement<T extends AnyNode> {
+  interface VirtualElement<T extends AnyNode | null> {
     virtual: null | T;
     capacitors: ReactiveCapacitors;
   }
   interface Node {
     type: NodeTypes;
+    treeId: symbol | undefined;
+    treeIdx: number;
+    // contextId: symbol | undefined;
+  }
+  interface IndexNode {
+    indexOf: number;
   }
   interface RelativeNode extends IndexNode {
     parent: AnyNode | null;
   }
   interface RehydratableNode extends Node {
     needsRehydrate: boolean;
-  }
-  interface IndexNode {
-    indexOf: number;
   }
   interface Parent<T extends HTMLTags = HTMLTags>
     extends Node,
@@ -146,25 +155,32 @@ declare namespace Nocta {
       DomElement<Element<T>> {
     type: NodeType.Tag;
     tag: T;
-    props: HTMLProps<T>;
+    props: HTMLProps<T> | void;
     children: NodeChildren;
   }
-  type Forwarder<
-    T extends AnyNode | null = AnyNode,
-    P extends ComponentProps | any = void
-  > = (props: P) => T;
+  type Template<
+    T extends AnyValidNode = AnyValidNode,
+    P extends KeyedObject | void = void
+  > = P extends void ? () => T : (props: P) => T;
   interface Component<
-    T extends AnyNode = AnyNode,
-    P extends ComponentProps | any = any
+    T extends AnyValidNode = AnyValidNode,
+    P extends KeyedObject | void = void
   > extends RehydratableNode,
       RelativeNode,
       VirtualElement<T> {
+    id: symbol;
     type: NodeType.Component;
-    component: Forwarder<T, P>;
-    props: P;
+    template: Template<T, P>;
+    props: P | undefined;
+  }
+  type ContextLinkerUpdater = VoidFunction;
+  type ContextLinkerProvide = (args?: any) => void;
+  interface ContextConstructor<T extends Nocta.KeyedObject> {
+    new (upd: ContextLinkerUpdater): T;
   }
   interface Fragment extends RehydratableNode, RelativeNode {
     type: NodeType.Fragment;
     children: NodeChildren;
+    validIndexOf: number;
   }
 }
