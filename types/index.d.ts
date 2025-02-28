@@ -180,7 +180,6 @@ declare namespace Nocta {
     set data(nd: Context<T>);
   }
   interface ContextLinker<Args extends any = any> {
-    // protected abstract update(): void;
     onProvide?: ContextLinkerProvide<Args>;
     onDestroy?: VoidFunction;
   }
