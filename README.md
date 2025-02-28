@@ -526,22 +526,22 @@ class CounterContextTemplate extends ContextLinker implements CounterContext {
 This defines the structure of the context.
 `update` is provided by the extension from `ContextLinker` and it performs an update of all the consumers consuming this context; this lets you decide when components should update.
 
-To be able to access this context from the components, you must create a `ContextLinker` using `contextLinker`:
+To be able to access this context from the components, you must create a `ContextLinker` using `contextWrapper`:
 
 ```ts
-import { contextLinker } from "nocta";
+import { contextWrapper } from "nocta";
 
-const counterContextLinker = contextLinker<CounterContext>();
+const counterContextWrapper = contextWrapper<CounterContext>();
 ```
 
 This is where the `Context template` will be generated and stored.
 
-Before the components consume this context, it has to be populated with `provide`. This generates the context using the template class and it gets linked to the `ContextLinker`.
+Before the components consume this context, it has to be populated with `provide`. This generates the context using the template class and it gets linked to the `ContextWrapper`.
 
 ```ts
 import { provide } from "nocta";
 const App = () => {
-  provide(CounterContextTemplate, counterContextLinker);
+  provide(CounterContextTemplate, counterContextWrapper);
   return Component(counterConsumerTemplate);
 };
 ```
@@ -551,22 +551,22 @@ Then a component can use `consume`:
 ```ts
 import { consume } from "nocta";
 const counterConsumerTemplate = () => {
-  const counterContext = consume(counterContextLinker);
+  const counterContext = consume(counterContextWrapper);
   return Content(`The counter is ${counterContext.counter}`);
 };
 ```
 
 As `states`, context `consumers` need an `execution context`. They have to be wrapped inside of a `Component`. If they're not wrapped, they will be linked to the nearest execution context or `throw an error if there is not one`. There's no need of an `execution context` to `provide` a context.
 
-A context linker can be cleared using `clearLinker`. This can be called when a `ContextLinker` will no longer be used (if it is used later, you will need to call `provide` again before using it).
+A context linker can be cleared using `clearWrapper`. This can be called when a `ContextLinker` will no longer be used (if it is used later, you will need to call `provide` again before using it).
 
-`ContextLinker` can be defined anywhere. You can use them even inside of templates (you must handle the context destruction):
+`ContextWrapper` can be defined anywhere. You can use them even inside of templates (you must handle the context destruction):
 
 ```ts
 import {
   provide,
   consume,
-  contextLinker,
+  contextWrapper,
   Content,
   Component,
   renderNodes,
@@ -576,7 +576,7 @@ const counterConsumerTemplate: Nocta.Template<
   Nocta.Tag<"div">,
   { counterLinker: Nocta.ContextLinker<CounterContext> }
 > = () => {
-  const counterContext = consume(counterContextLinker);
+  const counterContext = consume(counterContextWrapper);
   return Tag("div", [
     Tag(
       "button",
@@ -600,14 +600,86 @@ const counterConsumerTemplate: Nocta.Template<
   ]);
 };
 const App = () => {
-  const counterContextLinker = contextLinker<CounterContext>();
-  provide(CounterContextTemplate, counterContextLinker);
+  const counterContextWrapper = contextWrapper<CounterContext>();
+  provide(CounterContextTemplate, counterContextWrapper);
   effect(() => {
     return () => {
-      clearLinker(counterContextLinker); // Destroy the linker when this component unmounts
+      clearWrapper(counterContextWrapper); // Destroy the linker when this component unmounts
+      // This will delete it's data and will be marked as destroyed
     };
   });
   return Component(counterConsumerTemplate, { counterLinker });
 };
 renderNodes(document.body!, Component(App));
+```
+
+#### onProvide and onDestroy
+
+When providing your `Context` it may need arguments; they can be passed through the `provide` function and they are defined by the `ContextLinker` generic:
+
+```ts
+class CounterContextTemplate
+  extends ContextLinker<{ initialCounter: number }>
+  implements CounterContext
+{
+  public counter = 0;
+  public onProvide: ((args: { initialCounter: number }) => void) | undefined = (
+    args
+  ) => {
+    this.counter = args.initialCounter;
+  };
+  public increase() {
+    this.counter++;
+    this.update();
+  }
+  public decrease() {
+    this.counter--;
+    this.update();
+  }
+}
+
+provide(CounterContextTemplate, counterContextWrapper, { initialCounter: 100 });
+```
+
+In the same way, when you need to perform some clean-up when the `Context` is destroyed with `clearWrapper`, use `onDestroy`:
+
+```ts
+class CounterContextTemplate
+  extends ContextLinker<{ initialCounter: number }>
+  implements CounterContext
+{
+  public counter = 0;
+  public onDestroy: VoidFunction | undefined = () => {
+    // Perform a clean-up
+  };
+  public increase() {
+    this.counter++;
+    this.update();
+  }
+  public decrease() {
+    this.counter--;
+    this.update();
+  }
+}
+```
+
+#### Provide and Consume
+
+When providing context, you can provide arguments. The fourth last arguments is forcing `provide`. `provide` does not overwrite a context if it's already defined, pass this argument if you want to overwrite.
+
+Sometimes you need to consume a `Context` inside a `Contex Template` or `Component` but avoiding the subscription. You can call `consume` providing a second argument, which defines if the `execution context` has to be linked or not (`true` by default). Passing false will let you access the data from the `Context` and without subscribing. Inside of contexts there is no execution context; if consuming, always pass the second argument `false`.
+
+```ts
+class CounterContextTemplate extends ContextLinker implements CounterContext {
+  public counter = 0;
+  public increase() {
+    const anotherContext = consume(anotherLinker, false);
+    this.counter++;
+    this.update();
+  }
+  public decrease() {
+    this.counter--;
+    this.update();
+  }
+}
 ```

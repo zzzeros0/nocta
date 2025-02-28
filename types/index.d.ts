@@ -60,6 +60,7 @@ declare namespace Nocta {
     | "innerHTML"
     | "outerHTML"
     | "innerContent"
+    | "textContent"
     | `DOCUMENT_${string}`
     | "NOTATION_NODE"
     | "PROCESSING_INSTRUCTION_NODE"
@@ -99,23 +100,17 @@ declare namespace Nocta {
   type NodeChildren = AnyValidNode[];
   type ChildrenProps = { children: NodeChildren };
   type ContextLinkerFlag = 0 | 1 | 2;
-  interface ContextLinker<T extends Nocta.KeyedObject> {
-    get consumers(): Map<symbol, Nocta.AnyComponent>;
-    get flag(): ContextLinkerFlag;
-    set flag(f: ContextLinkerFlag);
-    get data(): Holder<T>;
-    set data(nd: T);
-  }
+
   interface ReactiveCapacitors {
     state: Capacitor<Holder<any>>;
     effect: Capacitor<Effect>;
     cleanUp: Capacitor<VoidFunction>;
     memory: Capacitor<Holder<any>>;
-    links: Set<ContextLinker<any>>;
+    links: Set<ContextWrapper<any>>;
   }
-  interface Context<T extends Nocta.KeyedObject = Nocta.KeyedObject> {
-    readonly ctxs: Map<symbol, Nocta.Holder<T>>;
-  }
+  // interface Context<T extends Nocta.KeyedObject = Nocta.KeyedObject> {
+  //   readonly ctxs: Map<symbol, Nocta.Holder<T>>;
+  // }
   interface DomElement<T extends HTMLElement | Text = HTMLElement> {
     dom: null | T;
   }
@@ -127,7 +122,6 @@ declare namespace Nocta {
     type: NodeTypes;
     treeId: symbol | undefined;
     treeIdx: number;
-    // contextId: symbol | undefined;
   }
   interface IndexNode {
     indexOf: number;
@@ -158,6 +152,11 @@ declare namespace Nocta {
     props: HTMLProps<T> | void;
     children: NodeChildren;
   }
+  interface Fragment extends RehydratableNode, RelativeNode {
+    type: NodeType.Fragment;
+    children: NodeChildren;
+    validIndexOf: number;
+  }
   type Template<
     T extends AnyValidNode = AnyValidNode,
     P extends KeyedObject | void = void
@@ -173,14 +172,28 @@ declare namespace Nocta {
     template: Template<T, P>;
     props: P | undefined;
   }
-  type ContextLinkerUpdater = VoidFunction;
-  type ContextLinkerProvide = (args?: any) => void;
-  interface ContextConstructor<T extends Nocta.KeyedObject> {
-    new (upd: ContextLinkerUpdater): T;
+  interface ContextWrapper<T extends Nocta.KeyedObject> {
+    get consumers(): Map<symbol, Nocta.AnyComponent>;
+    get flag(): ContextLinkerFlag;
+    set flag(f: ContextLinkerFlag);
+    get data(): Holder<Context<T>>;
+    set data(nd: Context<T>);
   }
-  interface Fragment extends RehydratableNode, RelativeNode {
-    type: NodeType.Fragment;
-    children: NodeChildren;
-    validIndexOf: number;
+  interface ContextLinker<Args extends any = any> {
+    // protected abstract update(): void;
+    onProvide?: ContextLinkerProvide<Args>;
+    onDestroy?: VoidFunction;
+  }
+  type ContextLinkerUpdater = VoidFunction;
+  type ContextLinkerProvide<T = any> = T extends void
+    ? VoidFunction
+    : (args: T) => void;
+  type Context<T extends Nocta.KeyedObject, Args extends any = any> = T &
+    ContextLinker<Args>;
+  interface ContextConstructor<
+    T extends Nocta.KeyedObject,
+    Args extends any = any
+  > {
+    new (upd: ContextLinkerUpdater): Context<T, Args>;
   }
 }
