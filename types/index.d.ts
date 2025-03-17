@@ -15,7 +15,6 @@ declare namespace Nocta {
   type StateEffectSuscriber<T> = (eff: StateEffect<T>) => void;
   type State<T> = [get: StateGetter<T>, set: StateSetter<T>];
   type Effect = () => void | (() => void);
-
   interface Holder<T> {
     holded: T;
   }
@@ -71,11 +70,14 @@ declare namespace Nocta {
   interface ElementOverridedProperties {
     style?: Styles;
   }
+  interface ElementProps<T extends HTMLTags = HTMLTags> {
+    ref: Holder<Element<T>>;
+  }
   type ExcludeProperties<T> = {
     [K in keyof T as K extends HTMLExcludedProperties ? never : K]: T[K];
   };
   type HTMLProps<T extends HTMLTags = HTMLTags> = Partial<
-    ExcludeProperties<ExcludeFunctions<Element<T>>>
+    ExcludeProperties<ExcludeFunctions<Element<T>>> & ElementProps<T>
   > &
     ElementOverridedProperties;
   namespace NodeType {
@@ -108,9 +110,6 @@ declare namespace Nocta {
     memory: Capacitor<Holder<any>>;
     links: Set<ContextWrapper<any>>;
   }
-  // interface Context<T extends Nocta.KeyedObject = Nocta.KeyedObject> {
-  //   readonly ctxs: Map<symbol, Nocta.Holder<T>>;
-  // }
   interface DomElement<T extends HTMLElement | Text = HTMLElement> {
     dom: null | T;
   }

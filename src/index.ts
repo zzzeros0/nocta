@@ -275,6 +275,9 @@ function clearDom(node: Nocta.Tag | Nocta.Content) {
   if (node.dom) {
     if (isTagNode(node) && node.props) {
       for (const k in node.props) {
+        if (k === "ref" && node.props.ref) {
+          (node.props.ref as any).holded = undefined;
+        }
         if (k.startsWith("on")) {
           const ev_name = k.slice(2);
           node.dom.removeEventListener(ev_name, Reflect.get(node.props, k));
@@ -424,7 +427,10 @@ function applyProps(node: Nocta.Tag) {
   if (!node.dom) throw new Error("Dom is null");
   if (node.props)
     for (const k in node.props) {
-      if (k === "style" && node.props.style) {
+      if (k === "ref" && node.props.ref) {
+        if (node.dom) node.props.ref.holded = node.dom;
+        console.log("Applying ref");
+      } else if (k === "style" && node.props.style) {
         for (const s in node.props.style) {
           try {
             const v = node.props.style[s];

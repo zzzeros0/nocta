@@ -22,6 +22,7 @@ Nocta is a small and reactive lightweight typescript library that eases the crea
   - [State](#state)
   - [Effect](#effect)
   - [Memory](#memory)
+    - [Getting an element's ref](#getting-an-element's-ref)
   - [Context](#context)
 
 ## Installation
@@ -56,7 +57,7 @@ Tag("button", { id: "123" }, [
 // When painted: <button id="123"><strong>I'm</strong> the text inside the button!</button>
 
 Tag("button", [Content("This button received no props!")]); // Nocta.Tag<"button">
-// When painted: <button>"This button received no props!</button>
+// When painted: <button>This button received no props!</button>
 ```
 
 ### Content
@@ -438,27 +439,6 @@ Also performing state updates will perform an execution of the effects. You have
 
 `Memory` allows you to store values during the component's lifecycle. Unlike states, changes in memory will not perform a repaint. It returns a `Holder<T>`:
 
-```ts
-import { Tag, memory } from "nocta";
-
-const myButtonMemory = () => {
-  const loginAttempts = memory<number>(0);
-  const userFetched = memory<boolean>(false);
-  const userData = memory<{
-    user_id: string;
-  }>({
-    user_id: "",
-  });
-  return Tag("button", {
-    onclick(v) {
-      loginMemory.holded++;
-      userFetched.holded = false;
-      // This actions won't procude a repaint
-    },
-  });
-};
-```
-
 Memory can be used to control the `node's lifecycle logic`. For example, it can be used to choose wether an effect should run or not:
 
 ```ts
@@ -491,6 +471,27 @@ const myButtonEffectWithMemory = () => {
       loginMemory.holded.loginAttempts++;
       // This won't procude a repaint
     },
+  });
+};
+```
+
+#### Getting an element's ref
+
+Memory must be used for `ref`. `ref` has been included in `v1.1.2` and it allows you to store a reference to the HTMLElement:
+
+```ts
+import { Tag, memory } from "nocta";
+
+const myButtonMemoryRef = () => {
+  const buttonRef = memory<HTMLButtonElement>();
+
+  effect(() => {
+    if (buttonRef.holded) {
+      // buttonRef.holded contains the HTMLButtonElement reference
+    }
+  });
+  return Tag("button", {
+    ref: buttonRef,
   });
 };
 ```
@@ -681,5 +682,14 @@ class CounterContextTemplate extends ContextLinker implements CounterContext {
     this.counter--;
     this.update();
   }
+}
+```
+
+`Contexts` can be also used outside of components or other contexts, as long as the context has been provided:
+
+```ts
+function doWatheverOutsideContext() {
+  const myContext = consume(contextLinker, false);
+  ...
 }
 ```
