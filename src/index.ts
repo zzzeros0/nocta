@@ -429,7 +429,6 @@ function applyProps(node: Nocta.Tag) {
     for (const k in node.props) {
       if (k === "ref" && node.props.ref) {
         if (node.dom) node.props.ref.holded = node.dom;
-        console.log("Applying ref");
       } else if (k === "style" && node.props.style) {
         for (const s in node.props.style) {
           try {
