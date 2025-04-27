@@ -693,3 +693,38 @@ function doWatheverOutsideContext() {
   ...
 }
 ```
+
+---
+
+#### Additional
+
+You can also define custom functions that use state, effect, memo or context to use in your template function (don't forget of wrapping it inside Component() or it's context parent):
+
+```ts
+// hook.ts
+import { state, effect } from "nocta";
+
+export function getUser() {
+  const [user, setUser] = state<YourUserInterface | null>(null);
+  const [userError, setUserError] = state<YourUserInterface | null>(null);
+  effect(() => {
+    requestUser().then(setUser).catch(setUserError);
+  });
+  return { user, error };
+}
+
+// component.ts
+import { getUser } from "./hooks.ts";
+
+export const UserTemplate: Nocta.Template<Tag<"div">> = () => {
+  const { user, userError } = getUser();
+
+  return Tag("div", [
+    user()
+      ? Tag("p", [Content(`Welcome ${user()!.name}`)])
+      : userError()
+      ? Tag("p", [Content(`User error: ${userError()!.description}`)])
+      : Tag("p", [Content("No user found")]),
+  ]);
+};
+```
