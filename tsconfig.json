@@ -7,7 +7,8 @@
     "declarationDir": "./dist",
     "outDir": "./dist",
     "strict": true,
-    "moduleResolution": "node",
+    "experimentalDecorators": true,
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "skipLibCheck": false
   },

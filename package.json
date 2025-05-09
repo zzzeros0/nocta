@@ -19,13 +19,18 @@
   "keywords": [
     "framework",
     "web",
+    "web-ui",
+    "render",
+    "web-app",
     "web-components",
     "html",
+    "ux",
     "ui",
     "front-end",
     "frontend",
     "typescript",
-    "nocta"
+    "nocta",
+    "client"
   ],
   "author": "zzzeros0",
   "license": "ISC",

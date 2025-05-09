@@ -65,6 +65,10 @@ class Capacitor<T> implements Nocta.Capacitor<T> {
     this._closed = false;
   }
 }
+function _is_primitive(t: any) {
+  const ty = typeof t;
+  return ty === "string" || ty === "number" || ty === "boolean";
+}
 function node<T extends Nocta.AnyNode>(n: Nocta.AnyNode): T {
   Object.setPrototypeOf(n, NodePrototype);
   return n as T;
@@ -92,13 +96,14 @@ function Parent(
   ...children: Nocta.NodeChildren
 ): Nocta.Parent {
   if (children.length === 0)
-    throw new Error("A main node must have at least one children");
+    throw new Error("Parent nodes must have at least one children");
   return node({
     type: NODE_TYPE_PARENT,
     dom: root,
     children,
     treeId: Symbol(),
     treeIdx: 0,
+    deleted: false,
   });
 }
 function Fragment(...children: Nocta.NodeChildren): Nocta.Fragment {
@@ -111,6 +116,7 @@ function Fragment(...children: Nocta.NodeChildren): Nocta.Fragment {
     validIndexOf: 0,
     treeId: undefined,
     treeIdx: 0,
+    deleted: false,
   });
 }
 function Tag<T extends Nocta.HTMLTags>(tag: T): Nocta.Tag<T>;
@@ -141,6 +147,7 @@ function Tag<T extends Nocta.HTMLTags>(tag: T, ...args: any[]): Nocta.Tag<T> {
         indexOf: 0,
         treeId: undefined,
         treeIdx: 0,
+        deleted: false,
       });
     }
     return node({
@@ -154,6 +161,7 @@ function Tag<T extends Nocta.HTMLTags>(tag: T, ...args: any[]): Nocta.Tag<T> {
       indexOf: 0,
       treeId: undefined,
       treeIdx: 0,
+      deleted: false,
     });
   }
   return node({
@@ -167,6 +175,7 @@ function Tag<T extends Nocta.HTMLTags>(tag: T, ...args: any[]): Nocta.Tag<T> {
     indexOf: 0,
     treeId: undefined,
     treeIdx: 0,
+    deleted: false,
   });
 }
 function Content(content: string): Nocta.Content {
@@ -179,6 +188,7 @@ function Content(content: string): Nocta.Content {
     indexOf: 0,
     treeId: undefined,
     treeIdx: 0,
+    deleted: false,
   });
 }
 function Component<T extends Nocta.AnyValidNode = Nocta.AnyValidNode>(
@@ -202,7 +212,9 @@ function Component<
       state: new Capacitor(),
       memory: new Capacitor(),
       cleanUp: new Capacitor(),
-      links: new Set(),
+      // links: new Set(),
+      consumes: new Set(),
+      provides: new Set(),
     },
     parent: null,
     virtual: null,
@@ -210,6 +222,7 @@ function Component<
     indexOf: 0,
     treeId: undefined,
     treeIdx: 0,
+    deleted: false,
   }) as Nocta.Component<T, P>;
 }
 function generateComponent(node: Nocta.AnyComponent): Nocta.AnyNode | null {
@@ -226,6 +239,9 @@ function generateComponent(node: Nocta.AnyComponent): Nocta.AnyNode | null {
     exitCurrentNodeContext();
     throw new Error("Template cant be a promise");
   }
+  if (typeof comp === "string") {
+    return Content(comp);
+  }
   if (comp) {
     if (!isNode(comp)) {
       exitCurrentNodeContext();
@@ -233,15 +249,22 @@ function generateComponent(node: Nocta.AnyComponent): Nocta.AnyNode | null {
     }
     relateChild(node, comp);
   }
+  if (typeof comp === "string") {
+    return Content(comp);
+  }
   exitCurrentNodeContext();
   return comp;
+}
+function hasChild(
+  node: Nocta.AnyNode
+): node is Nocta.Fragment | Nocta.Tag | Nocta.Parent {
+  return Reflect.get(node, "children");
 }
 function relateChild(node: Nocta.AnyNode, child: Nocta.AnyNode) {
   child.treeId = node.treeId;
   child.treeIdx = node.treeIdx + 1;
-  if (isParentNode(child)) {
-    return;
-  } else child.parent = node;
+  if (isParentNode(child)) return;
+  child.parent = node;
 }
 function generateTree(node: Nocta.AnyComponent) {
   if (!isComponentNode(node)) throw new Error("Need to be a component");
@@ -256,6 +279,17 @@ function generateTree(node: Nocta.AnyComponent) {
     }
     if (node.virtual) {
       if (node.virtual.type !== virtual.type) {
+        if (
+          (!isParentNode(node.virtual) && isContentNode(virtual)) ||
+          isFragmentNode(virtual)
+        ) {
+          if (!isParentNode(node.virtual)) {
+            virtual.indexOf = node.virtual.indexOf;
+            if (isFragmentNode(node.virtual)) {
+              node.virtual.validIndexOf = getFValidIdxOf(node.virtual);
+            }
+          }
+        }
         clearNode(node.virtual);
         relateChild(node, virtual);
         node.virtual = virtual;
@@ -276,7 +310,7 @@ function clearDom(node: Nocta.Tag | Nocta.Content) {
     if (isTagNode(node) && node.props) {
       for (const k in node.props) {
         if (k === "ref" && node.props.ref) {
-          (node.props.ref as any).holded = undefined;
+          (node.props.ref as any).holds = undefined;
         }
         if (k.startsWith("on")) {
           const ev_name = k.slice(2);
@@ -292,14 +326,33 @@ function clearReactivity(node: Nocta.AnyComponent) {
   node.capacitors.state.reset();
   node.capacitors.effect.reset();
   node.capacitors.memory.reset();
-  if (node.capacitors.links.size) {
-    for (const l of node.capacitors.links) {
-      l.consumers.delete(node.id);
+  for (const c of node.capacitors.consumes as unknown as Set<{
+    consumers: Set<Nocta.Component>;
+  }>) {
+    if (c.consumers) {
+      c.consumers.delete(node);
     }
-    node.capacitors.links.clear();
   }
+  node.capacitors.consumes.clear();
+  if (node.treeId)
+    for (const p of node.capacitors.provides as unknown as Set<{
+      providers: Map<symbol, object>;
+    }>) {
+      {
+        const ctx = p.providers.get(node.treeId) as ContextHandler | undefined;
+        if (ctx && ctx.destroy && typeof ctx.destroy === "function") {
+          try {
+            ctx.destroy();
+          } catch (error) {
+            console.error(error);
+          }
+        }
+      }
+      p.providers.delete(node.treeId);
+    }
 }
 function clearNode(node: Nocta.AnyNode) {
+  node.deleted = true;
   if (isComponentNode(node)) {
     if (updateNodeQueue.has(node)) updateNodeQueue.delete(node);
     if (node.virtual) {
@@ -315,16 +368,20 @@ function clearNode(node: Nocta.AnyNode) {
   }
   if (!isFragmentNode(node) && !isParentNode(node)) clearDom(node);
 }
-function clearChild(node: Nocta.Fragment | Nocta.Parent | Nocta.Tag) {
+function clearChild(node: Nocta.NodeWithChildren) {
   if (node.children.length)
     for (const c of node.children) {
+      if (typeof c === "string") {
+        console.warn("Expected to find a content node. Found string.");
+        continue;
+      }
       if (c) clearNode(c);
     }
 }
-function diffChild<T extends Nocta.Fragment | Nocta.Parent | Nocta.Tag>(
-  node: T,
-  target: T
-) {
+function diffChild<
+  T extends Nocta.NodeWithChildren,
+  P extends Nocta.NodeWithChildren
+>(node: T, target: P) {
   if (!node || !target) return;
   if (target.children.length === 0) {
     clearChild(node);
@@ -340,7 +397,23 @@ function diffChild<T extends Nocta.Fragment | Nocta.Parent | Nocta.Tag>(
     const child = node.children[i];
     const dchild = target.children[i];
     if (child) {
+      if (typeof child === "string") {
+        node.children[i] = null;
+        console.warn("Found string where supposed to find a Content node");
+        continue;
+      }
       if (dchild) {
+        if (typeof dchild === "string") {
+          if (isContentNode(child)) {
+            child.content = dchild;
+          } else {
+            clearNode(child);
+            const c = Content(dchild);
+            node.children[i] = c;
+            relateChild(node, c);
+          }
+          continue;
+        }
         if (child.type !== dchild.type) {
           if (!isParentNode(dchild)) {
             dchild.indexOf = isParentNode(child) ? i : child.indexOf ?? i;
@@ -358,6 +431,12 @@ function diffChild<T extends Nocta.Fragment | Nocta.Parent | Nocta.Tag>(
         lastChild = null;
       }
     } else if (dchild) {
+      if (typeof dchild === "string") {
+        const c = Content(dchild);
+        node.children[i] = c;
+        relateChild(node, c);
+        continue;
+      }
       if (!isParentNode(dchild)) {
         if (lastChild && !isParentNode(lastChild)) {
           if (isFragmentNode(lastChild)) {
@@ -428,7 +507,7 @@ function applyProps(node: Nocta.Tag) {
   if (node.props)
     for (const k in node.props) {
       if (k === "ref" && node.props.ref) {
-        if (node.dom) node.props.ref.holded = node.dom;
+        if (node.dom) node.props.ref.holds = node.dom;
       } else if (k === "style" && node.props.style) {
         for (const s in node.props.style) {
           try {
@@ -447,7 +526,6 @@ function applyProps(node: Nocta.Tag) {
         if (!(node.props as Nocta.KeyedObject)[k]) continue;
         if (typeof (node.props as Nocta.KeyedObject)[k] !== "function")
           throw new Error(`Wrong event listener '${k}'`);
-
         node.dom.addEventListener(
           ev_name,
           (node.props as Nocta.KeyedObject)[k]
@@ -468,12 +546,13 @@ function applyProps(node: Nocta.Tag) {
       }
     }
 }
-function diff<T extends Nocta.AnyNode>(node: T, target: T) {
+function diff<T extends Nocta.AnyNode, P extends Nocta.AnyNode>(
+  node: T,
+  target: P
+) {
   if (!target) return;
-  if (isParentNode(node)) {
-    diffChild(node, target as Nocta.Parent);
-  } else if (isFragmentNode(node)) {
-    diffChild(node, target as Nocta.Fragment);
+  if (isParentNode(node) || (isFragmentNode(node) && hasChild(target))) {
+    diffChild(node, target as Nocta.NodeWithChildren);
   } else if (isTagNode(node)) {
     const _target = target as Nocta.Tag;
     diffProps(node, _target);
@@ -542,9 +621,13 @@ function renderChild(node: Nocta.Parent | Nocta.Tag | Nocta.Fragment) {
     idxof = node.indexOf;
     node.validIndexOf = getFValidIdxOf(node);
   }
-  for (const c of node.children) {
+  for (let i = 0; i < node.children.length; i++) {
+    let c = node.children[i];
     if (c) {
-      if (!isParentNode(c)) {
+      if (typeof c === "string") {
+        c = Content(c);
+        node.children[i] = c;
+      } else if (!isParentNode(c)) {
         if (lastNode) {
           if (!isParentNode(lastNode)) {
             if (isFragmentNode(lastNode)) {
@@ -552,17 +635,13 @@ function renderChild(node: Nocta.Parent | Nocta.Tag | Nocta.Fragment) {
               c.indexOf = idxof;
             } else if (isComponentNode(lastNode)) {
               if (lastNode.virtual && !isParentNode(lastNode.virtual)) {
-                if (isFragmentNode(lastNode.virtual)) {
-                  idxof = lastNode.virtual.validIndexOf;
-                  c.indexOf = idxof;
-                } else {
-                  idxof = lastNode.virtual.indexOf + 1;
-                  c.indexOf = idxof;
-                }
+                idxof = isFragmentNode(lastNode.virtual)
+                  ? lastNode.virtual.validIndexOf
+                  : lastNode.virtual.indexOf + 1;
               } else {
                 idxof = lastNode.indexOf + 1;
-                c.indexOf = idxof;
               }
+              c.indexOf = idxof;
             } else {
               idxof = lastNode.indexOf + 1;
               c.indexOf = lastNode.indexOf + 1;
@@ -585,7 +664,8 @@ function render(node: Nocta.AnyNode) {
     renderChild(node);
   } else if (isContentNode(node)) {
     if (node.dom) {
-      node.dom.nodeValue = node.content;
+      if (node.dom.nodeValue !== node.content)
+        node.dom.nodeValue = node.content;
       if (!node.dom.isConnected) {
         attach(node);
       }
@@ -658,7 +738,14 @@ function exitCurrentNodeContext() {
   clearNodeContext(currentNodeContext.pop()!);
 }
 function queueNodeUpdate(node: Nocta.AnyComponent) {
+  if (node.deleted) return;
   node.needsRehydrate = true;
+  if (updateNodeQueue.has(node)) return;
+  // for (const n of updateNodeQueue.values()) {
+  //   if (n.treeId === node.treeId && n.treeIdx <= node.treeIdx) {
+  //     return;
+  //   }
+  // }
   updateNodeQueue.add(node);
   scheduleNodeUpdate();
 }
@@ -674,6 +761,10 @@ function scheduleNodeUpdate() {
 function processNodeUpdateQueue() {
   for (const node of updateNodeQueue) {
     updateNodeQueue.delete(node);
+    if (node.deleted) {
+      node.needsRehydrate = false;
+      return;
+    }
     if (!node.needsRehydrate) return;
     generateTree(node);
     render(node);
@@ -694,10 +785,12 @@ function performStateUpdate<T>(
   state: Nocta.Holder<T>,
   val: T | Nocta.StateMemoUpdate<T>
 ) {
-  state.holded =
-    typeof val === "function"
-      ? (val as Nocta.StateMemoUpdate<T>)(state.holded)
-      : val;
+  if (typeof val === "function") {
+    const rt = (val as Nocta.StateMemoUpdate<T>)(state.holds);
+    if (_is_primitive(rt) && rt === state.holds) return;
+    else state.holds = rt;
+  } else if (_is_primitive(val) && val === state.holds) return;
+  else state.holds = val;
   queueNodeUpdate(node);
 }
 function executeEffects(node: Nocta.AnyComponent) {
@@ -724,16 +817,16 @@ function state<T extends any>(initialValue?: T): Nocta.State<T> {
   const curr_state: Nocta.Holder<T> = ctx.capacitors.state.closed
     ? ctx.capacitors.state.get()
     : ctx.capacitors.state.add({
-        holded: initialValue,
+        holds: initialValue,
       });
   const get: Nocta.StateGetter<T> = () => {
-    return curr_state.holded;
+    return curr_state.holds;
   };
   const set: Nocta.StateSetter<T> = (val) =>
     performStateUpdate(ctx, curr_state, val);
   return [get, set];
 }
-function effect(f: VoidFunction) {
+function effect(f: Nocta.Effect) {
   const ctx = getCurrentNodeContextOrThrow();
   ctx.capacitors.effect.add(f);
 }
@@ -741,116 +834,136 @@ function memory<T extends any>(initialValue?: T): Nocta.Holder<T> {
   const ctx = getCurrentNodeContextOrThrow();
   return ctx.capacitors.memory.closed
     ? ctx.capacitors.memory.get()
-    : ctx.capacitors.memory.add({ holded: initialValue });
+    : ctx.capacitors.memory.add({ holds: initialValue });
 }
-const enum ContextLinkerFlag {
-  None,
-  Provided,
-  Destroyed,
-}
-abstract class AbsContextLinker<P extends any> {
-  protected abstract update: Nocta.ContextLinkerUpdater;
-  public declare onProvide: Nocta.ContextLinkerProvide<P> | undefined;
-  public declare onDestroy: VoidFunction | undefined;
-}
-class ContextLinker<Args extends any = any> extends AbsContextLinker<Args> {
-  protected readonly update: Nocta.ContextLinkerUpdater;
-  public onProvide: Nocta.ContextLinkerProvide<Args> | undefined = undefined;
-  public onDestroy: VoidFunction | undefined = undefined;
-  constructor(u: VoidFunction) {
-    super();
-    this.update = u;
-  }
-}
-function contextUpdater(consumers: Map<symbol, Nocta.AnyComponent>) {
-  for (const c of consumers.values()) {
-    queueNodeUpdate(c);
-  }
-}
-function contextWrapper<
-  T extends Nocta.KeyedObject
->(): Nocta.ContextWrapper<T> {
-  const consumers: Map<symbol, Nocta.AnyComponent> = new Map();
-  const data: Nocta.Holder<undefined | T> = {
-    holded: undefined,
+function updater() {
+  const ctx = getCurrentNodeContextOrThrow();
+  return () => {
+    queueNodeUpdate(ctx);
   };
-  let flag: ContextLinkerFlag = ContextLinkerFlag.None;
-  return Object.create(Object.prototype, {
-    consumers: {
-      enumerable: false,
-      configurable: false,
-      get: () => consumers,
-      set: (_) => {
-        throw new Error("Consumers cant be overwritten");
-      },
-    },
-    data: {
-      enumerable: false,
-      configurable: false,
-      get: () => data,
-      set: (nd: T) => {
-        data.holded = nd;
-      },
-    },
-    flag: {
-      enumerable: false,
-      configurable: false,
-      get: () => flag,
-      set: (f: ContextLinkerFlag) => {
-        flag = f;
-      },
-    },
-  });
 }
-function provide<T extends Nocta.KeyedObject, Args extends any = any>(
-  template: Nocta.ContextConstructor<T, Args>,
-  linker: Nocta.ContextWrapper<T>,
-  args?: Args,
-  force: boolean = false
-) {
-  if (
-    linker.data.holded &&
-    !force &&
-    linker.flag === ContextLinkerFlag.Provided
-  )
-    return;
-  linker.data = new template(() => contextUpdater(linker.consumers));
-  linker.flag = ContextLinkerFlag.Provided;
-  if (
-    linker.data.holded?.onProvide &&
-    typeof linker.data.holded?.onProvide === "function"
-  )
-    linker.data.holded.onProvide(args);
+abstract class ContextHandler {
+  protected declare readonly update: VoidFunction;
+  protected declare readonly symbol: symbol;
+  protected declare readonly link: <
+    T extends readonly (abstract new (...args: any) => any)[]
+  >(
+    ...contexts: T
+  ) => Nocta.InstanceTypeArray<T>;
+  public declare readonly destroy?: VoidFunction;
 }
-function consume<T extends Nocta.KeyedObject>(
-  linker: Nocta.ContextWrapper<T>,
-  link: boolean = true
-) {
-  if (linker.flag !== ContextLinkerFlag.Provided)
-    throw new Error("Context linker has not been provided");
-  if (link) {
-    const nctx = getCurrentNodeContextOrThrow();
-    nctx.capacitors.links.add(linker);
-    linker.consumers.set(nctx.id, nctx);
-  }
-  return linker.data.holded;
+function Context<P extends object>(
+  constructor: Nocta.Constructable<P>
+): Nocta.ContextPrototype<P> {
+  return class __c__ extends (constructor as any) {
+    private static readonly providers: Map<symbol, P> = new Map();
+    public readonly consumers: Set<Nocta.Component> = new Set();
+    private readonly tree_id: symbol | undefined = undefined;
+    constructor(...args: any) {
+      super(...args);
+      const ctx = getCurrentNodeContextOrThrow();
+      if (!ctx.treeId) throw new Error("Tree id is undefined");
+      this.tree_id = ctx.treeId;
+      __c__.providers.set(this.tree_id, this as unknown as P);
+      ctx.capacitors.provides.add(__c__ as Nocta.ContextPrototype);
+    }
+    link<T extends readonly (abstract new (...args: any) => any)[]>(
+      ...contexts: T
+    ): Nocta.InstanceTypeArray<T> {
+      if (!this.tree_id) throw new Error("Not in tree");
+
+      return contexts.map((c) => {
+        if (
+          !Reflect.has(c, "providers") ||
+          !((c as any).providers instanceof Map)
+        )
+          throw new Error("Bad context provided");
+        // if (!this.tree_id) throw new Error("Not in tree");
+        const ctx = c as any as { providers: Map<symbol, P> };
+        // @ts-ignore
+        if (!ctx.providers.has(this.tree_id))
+          throw new Error("Context not found");
+        // @ts-ignore
+        return ctx.providers.get(this.tree_id)!;
+      }) as Nocta.InstanceTypeArray<T>;
+    }
+    protected update() {
+      for (const c of this.consumers) {
+        queueNodeUpdate(c);
+      }
+    }
+  } as unknown as Nocta.ContextPrototype<P>;
 }
-function clearWrapper<T extends Nocta.KeyedObject>(
-  wrapper: Nocta.ContextWrapper<T>
-) {
-  if (
-    wrapper.data.holded?.onDestroy &&
-    typeof wrapper.data.holded?.onDestroy === "function"
-  )
-    wrapper.data.holded.onDestroy();
-  for (const c of wrapper.consumers.values()) {
-    if (updateNodeQueue.has(c)) updateNodeQueue.delete(c);
-    c.capacitors.links.delete(wrapper);
-  }
-  wrapper.consumers.clear();
-  wrapper.flag = ContextLinkerFlag.Destroyed;
-  Reflect.set(wrapper.data, "holded", undefined);
+
+function consume<T extends readonly (abstract new (...args: any) => any)[]>(
+  ...contexts: T
+): Nocta.InstanceTypeArray<T> {
+  const ctx = getCurrentNodeContextOrThrow();
+  return contexts.map((c) => {
+    if (!Reflect.has(c, "providers") || !((c as any).providers instanceof Map))
+      throw new Error("Bad context provided");
+    const stctx = c as any as {
+      providers: Map<symbol, object>;
+    };
+    if (!ctx.treeId) throw new Error("Tree not found");
+    if (!stctx.providers.has(ctx.treeId))
+      throw new Error("Not found in the tree");
+    const tc = stctx.providers.get(ctx.treeId) as {
+      consumers: Set<Nocta.Component>;
+    };
+    if (!tc || !tc.consumers || !(tc.consumers instanceof Set))
+      throw new Error("Wrong consumers");
+
+    if (!tc.consumers.has(ctx)) {
+      tc.consumers.add(ctx);
+    }
+    if (!ctx.capacitors.consumes.has(c as Nocta.ContextPrototype)) {
+      ctx.capacitors.consumes.add(c as Nocta.ContextPrototype);
+    }
+    // return new Proxy(tc, {
+    //   get(target, prop, receiver) {
+    //     if (prop === "consumers") throw new Error("Invalid access");
+    //     return Reflect.get(target, prop, receiver);
+    //   },
+    //   set(target, prop, value, receiver) {
+    //     if (prop === "consumers") throw new Error("Invalid access");
+    //     return Reflect.set(target, prop, value, receiver);
+    //   },
+    // });
+    return tc;
+  }) as Nocta.InstanceTypeArray<T>;
 }
+function link<T extends readonly (abstract new (...args: any) => any)[]>(
+  ...contexts: T
+): Nocta.InstanceTypeArray<T> {
+  const ctx = getCurrentNodeContextOrThrow();
+  return contexts.map((c) => {
+    if (!Reflect.has(c, "providers") || !((c as any).providers instanceof Map))
+      throw new Error("Bad context provided");
+    const stctx = c as any as {
+      providers: Map<symbol, object>;
+    };
+    if (!ctx.treeId) throw new Error("Tree not found");
+    if (!stctx.providers.has(ctx.treeId))
+      throw new Error("Not found in the tree");
+    const tc = stctx.providers.get(ctx.treeId) as {
+      consumers: Set<Nocta.Component>;
+    };
+    if (!tc) throw new Error("Wrong context");
+    // return new Proxy(tc, {
+    //   get(target, prop, receiver) {
+    //     if (prop === "consumers") throw new Error("Invalid access");
+    //     return Reflect.get(target, prop, receiver);
+    //   },
+    //   set(target, prop, value, receiver) {
+    //     if (prop === "consumers") throw new Error("Invalid access");
+    //     return Reflect.set(target, prop, value, receiver);
+    //   },
+    // });
+    return tc;
+  }) as Nocta.InstanceTypeArray<T>;
+}
+
 export {
   Parent,
   Fragment,
@@ -861,9 +974,9 @@ export {
   state,
   effect,
   memory,
-  contextWrapper,
+  updater,
+  Context,
+  ContextHandler,
   consume,
-  provide,
-  clearWrapper,
-  ContextLinker,
+  link,
 };

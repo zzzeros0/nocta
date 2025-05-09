@@ -14,9 +14,9 @@ declare namespace Nocta {
   type StateEffect<T> = (curr: T) => void;
   type StateEffectSuscriber<T> = (eff: StateEffect<T>) => void;
   type State<T> = [get: StateGetter<T>, set: StateSetter<T>];
-  type Effect = () => void | (() => void);
+  type Effect = (() => void) | (() => () => void);
   interface Holder<T> {
-    holded: T;
+    holds: T;
   }
   interface StateContainer<T = any> extends Holder<T> {
     effect: StateEffect<T> | null;
@@ -97,9 +97,10 @@ declare namespace Nocta {
   type ComponentProps = KeyedObject;
   type AnyComponent = Component | Component<AnyValidNode, any>;
   type AnyNode = Parent | Fragment | Tag | Content | AnyComponent;
-  type AnyValidNode = AnyNode | null;
+  type AnyValidNode = AnyNode | string | null;
   type AnyNodeExceptParent = Fragment | Tag | Content | Component;
   type NodeChildren = AnyValidNode[];
+  type NodeWithChildren = Parent | Fragment | Tag;
   type ChildrenProps = { children: NodeChildren };
   type ContextLinkerFlag = 0 | 1 | 2;
 
@@ -108,16 +109,21 @@ declare namespace Nocta {
     effect: Capacitor<Effect>;
     cleanUp: Capacitor<VoidFunction>;
     memory: Capacitor<Holder<any>>;
-    links: Set<ContextWrapper<any>>;
+    consumes: Set<ContextPrototype>;
+    provides: Set<ContextPrototype>;
+  }
+  interface DeletedNode {
+    deleted: boolean;
+    overrided?: Nocta.AnyNode;
   }
   interface DomElement<T extends HTMLElement | Text = HTMLElement> {
     dom: null | T;
   }
-  interface VirtualElement<T extends AnyNode | null> {
-    virtual: null | T;
+  interface VirtualElement<T extends AnyValidNode> {
+    virtual: T extends string ? Content : null | T;
     capacitors: ReactiveCapacitors;
   }
-  interface Node {
+  interface Node extends DeletedNode {
     type: NodeTypes;
     treeId: symbol | undefined;
     treeIdx: number;
@@ -171,27 +177,24 @@ declare namespace Nocta {
     template: Template<T, P>;
     props: P | undefined;
   }
-  interface ContextWrapper<T extends Nocta.KeyedObject> {
-    get consumers(): Map<symbol, Nocta.AnyComponent>;
-    get flag(): ContextLinkerFlag;
-    set flag(f: ContextLinkerFlag);
-    get data(): Holder<Context<T>>;
-    set data(nd: Context<T>);
+  type InstanceTypeArray<T extends readonly any[]> = {
+    [K in keyof T]: T[K] extends abstract new (...args: any) => infer R
+      ? R
+      : never;
+  };
+  abstract class ContextUpdateHandler {
+    protected declare readonly update: VoidFunction;
+    protected declare readonly symbol: symbol;
+    protected declare readonly link: <
+      T extends readonly (abstract new (...args: any) => any)[]
+    >(
+      ...contexts: T
+    ) => InstanceTypeArray<T>;
+    public declare readonly destroy?: VoidFunction;
   }
-  interface ContextLinker<Args extends any = any> {
-    onProvide?: ContextLinkerProvide<Args>;
-    onDestroy?: VoidFunction;
-  }
-  type ContextLinkerUpdater = VoidFunction;
-  type ContextLinkerProvide<T = any> = T extends void
-    ? VoidFunction
-    : (args: T) => void;
-  type Context<T extends Nocta.KeyedObject, Args extends any = any> = T &
-    ContextLinker<Args>;
-  interface ContextConstructor<
-    T extends Nocta.KeyedObject,
-    Args extends any = any
-  > {
-    new (upd: ContextLinkerUpdater): Context<T, Args>;
+  type ContextHandler<P extends object = object> = ContextUpdateHandler & P;
+  type Constructable<T extends object = object> = new (...args: any[]) => T;
+  interface ContextPrototype<P extends object = object> {
+    new (): P;
   }
 }

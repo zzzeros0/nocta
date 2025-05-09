@@ -1,16 +1,17 @@
 # Nocta
 
-Nocta is a small and reactive lightweight typescript library that eases the creation of small to complex user interfaces.
+**Nocta is a small and reactive** lightweight typescript library that eases the creation of small to complex user interfaces without the complexity of project setup; just a simple **0-deps library**.
 
-- Nocta is function based.
-
-- Nocta works with "Nodes".
+- Function based.
+- Works with "Nodes".
+- Fast & simple.
 
 ## Table of Contents
 
 - [Installation](#installation)
 - [Introduction](#introduction)
   - [Tag](#tag)
+    - [Nocta-Tags](#nocta-tags)
   - [Content](#content)
   - [Fragment](#fragment)
   - [Templates and Components](#templates-and-components)
@@ -23,6 +24,7 @@ Nocta is a small and reactive lightweight typescript library that eases the crea
   - [Effect](#effect)
   - [Memory](#memory)
     - [Getting an element's ref](#getting-an-element's-ref)
+  - [Updater](#updater)
   - [Context](#context)
 
 ## Installation
@@ -44,30 +46,33 @@ An HTML Element.
 ```ts
 import { Tag } from "nocta";
 
-Tag("div"); // Nocta.Tag<"div">
-// When painted: <div></div>
+Tag("div");
+// <div></div>
 
-Tag("div", { id: "123" }); // Nocta.Tag<"div">
-// When painted: <div id="123"></div>
+Tag("div", { id: "123" });
+// <div id="123"></div>
 
-Tag("button", { id: "123" }, [
-  Tag("strong", [Content("I'm")]),
-  Content(" the text inside the button!"),
-]); // Nocta.Tag<"button">
-// When painted: <button id="123"><strong>I'm</strong> the text inside the button!</button>
+Tag("button", { id: "123" }, ["I'm the text inside the button!"]);
+// <button id="123">
+//  I'm the text inside the button!
+// </button>
 
-Tag("button", [Content("This button received no props!")]); // Nocta.Tag<"button">
-// When painted: <button>This button received no props!</button>
+Tag("button", ["This button received no props!"]);
+// <button>This button received no props!</button>
 ```
 
-### Content
+#### Nocta-Tags
 
-An HTML text.
+Add the package [`nocta-tags`](https://www.npmjs.com/package/nocta-tags) to your project. This packages provide a shorthand for the HTML Tags:
 
 ```ts
-import { Content } from "nocta";
+import { div } from "nocta-tags";
 
-Content("I'm the text node"); // Nocta.Content
+Tag("div", { id: "123" }, ["A Div Tag node"]);
+
+// Shorthand:
+
+div({ id: "123" }, ["A Div Tag node"]);
 ```
 
 ### Fragment
@@ -77,29 +82,31 @@ A container of multiple children.
 ```ts
 import { Fragment } from "nocta";
 
-Fragment(Tag("div"), Tag("button"), Content("HTML Text")); // Nocta.Fragment
-// When painted: <><div></div><button></button>HTML Text</>
+Fragment(Tag("button"), "HTML Text"), Tag("span", ["Other text"]);
+// <>
+//  <button></button>HTML Text<span>Other text</span>
+// </>
 ```
 
 ### Templates and Components
 
-`Templates` are functions that return a node (or null).
+`Templates` are functions that return a node, string (text) or null (nothing).
 `Components` make use of `Templates` to provide reactivity.
 
 Defining templates:
 
 ```ts
-import { Tag, Content } from "nocta";
+import { Tag } from "nocta";
 
-const myTemplateNode: Nocta.Template<Nocta.Tag<"div">> = () => {
-  return Tag("div", [Tag("button", [Content("I'm the text in the button")])]);
+const myTemplateNode: Nocta.Template<Nocta.Tag<"button">> = () => {
+  return Tag("button", ["I'm the text in the button"]);
 };
 // myTemplateNode is a node Template: a function that returns a node.
-// This function must return a Tag "div"
+// This function is defined as Nocta.Template<Nocta.Tag<"button">> and must return a "button" tag
 
 // Defining Templates custom props:
 const myTemplateNode: Nocta.Template<
-  Nocta.Tag<"div">,
+  Nocta.Tag<"button">,
   { customProp: string }
 > = function ({customProp}) {
   ...
@@ -119,7 +126,7 @@ Component(myComponentFunction, {
 }); // Nocta.Component<Nocta.AnyValidNode, { customProp: string }>
 ```
 
-So, a `Template` can be seen as the node that will be returned, and a `Component` is a node that will use the `Template` to generate it's inner `node` and will provide an `execution context` for it's reactivity.
+So, a `Template` can be seen as a function that creates nodes (a template), and a `Component` is a node that will use the `Template` to generate it's inner `node` and will provide an `execution context` for it's reactivity.
 
 ### Parent
 
@@ -128,37 +135,37 @@ A root element that holds children. It serves as the entry point for your UI, as
 ```ts
 import { Parent } from "nocta";
 
-Parent(document.querySelector("#root")!, Tag("h1")); // Nocta.Parent
-// if html body is:
+Parent(document.querySelector("#root")!, Tag("h1", ["H1 Text"])); // Nocta.Parent
+// If html body is:
 // <body><div id="root"></div></body>
-// When painted:
-// <body><div id="root"><h1></h1></div></body>
+// Then:
+// <body><div id="root"><h1>H1 Text</h1></div></body>
 ```
 
 ---
 
 ## Usage
 
-Nodes are not intended to be stored in variables as they are dinamically changing. Storing them can produce memory leaks or unexpected behaviour. They are intended to be created at runtime and passed directly.
+Nodes are not intended to be statically stored in variables as they are dinamically changing. Storing them can produce memory leaks or unexpected behaviour. They are intended to be created at runtime and passed directly.
 
 Mainly, when working with nodes, the main entry points are `Templates` and `Components`.
 
 ```ts
 const App = () => {
   // Return the nodes you want.
-  return Tag("button", [Content("I'm a button")]);
+  return Tag("button", ["I'm a button"]);
 };
 
-renderNodes(document.body!, Component(App)); // Call 'Component' on the 'Template'
+renderNodes(document.body!, App()); // Use the 'Template' itself if it doesn't need an 'execution context'
 
 // Or
 
-renderNodes(document.body!, App()); // Use the 'Template' itself if it doesn't need an 'execution context'
+renderNodes(document.body!, Component(App)); // Call 'Component' on the 'Template'
 ```
 
 ### Creating Components
 
-Components make use of `Templates`. A function that returns a node (or null) is a `Template`. Let's define its type:
+Components make use of `Templates`. A function that returns a node, string or null can be a `Template`. Let's define its type:
 
 ```ts
 const myTemplateNode: Nocta.Template<
@@ -166,11 +173,11 @@ const myTemplateNode: Nocta.Template<
   {
     prop1: string;
     prop2: number;
-  } // Props definition
+  } & Nocta.ChildrenProps // Props definition
 >;
 ```
 
-`Nocta.Template` generic defines a function that returns a node (Tag, Content, Fragment...) or null.
+`Nocta.Template` generic defines a function that returns a node (Tag, Content, Fragment...), string or null.
 In the given example, the function must return `Nocta.Tag<"button">`.
 This generic also defines the props the component will receive. Let's define the function:
 
@@ -185,11 +192,11 @@ const myTemplateNode: Nocta.Template<
   }
 > = ({ prop1, prop2 }) => {
   console.log("Prop 1", prop1, "Prop 2", prop2);
-  return Tag("button", [Content("Im a button")]);
+  return Tag("button", ["Im a button"]);
 };
 ```
 
-The `Template` function is then used to generate a `Component` node using `Component`. `Components` create an execution context for the template to use its reactivity:
+The `Template` function is then used to generate a `Component` node using `Component`. `Components` create an `execution context` for the template to use its own reactivity:
 
 ```ts
 import { Component } from "nocta";
@@ -202,7 +209,7 @@ Component(myTemplateNode, {
 
 ### Rendering Nodes
 
-`renderNodes` is used to paint nodes. This is your app entry point and this must be called once over the node. Once it's painted, it's lifecycle is managed by the node itself.
+`renderNodes` is used to paint nodes. This is your app entry point and this must be called once. Once it's painted, it's lifecycle is managed itself.
 
 ```ts
 renderNodes(document.body, Tag("div"));
@@ -228,6 +235,16 @@ const parent: Nocta.Parent = renderNodes(
 );
 ```
 
+**Important: don't call `renderNodes` to render a node outside of the current tree (for example, a Modal); use `Parent`:**
+
+```ts
+const TemplateWithModal = () => {
+  return Tag("div", [
+    Parent(document.querySelector("#target")!, Tag("div",{ id: "modal" }, [...]));
+  ]);
+};
+```
+
 **Note: `renderNodes` will render the nodes in the next `event loop` (`async`). `Sync` code after calling `renderNodes` will be executed before they are rendered.**
 
 ### Difference between Template and Component
@@ -245,7 +262,7 @@ import { Fragment, Tag, Content, state } from "nocta";
 
 const myOtherTemplateNode: Nocta.Template<Nocta.Tag<"div">> = () => {
   const [message, setMessage] = state<string>("");
-  return Tag("div", [Content(message)]);
+  return Tag("div", [message()]);
 };
 const myTemplateNode: Nocta.Template<
   Nocta.Fragment,
@@ -255,16 +272,13 @@ const myTemplateNode: Nocta.Template<
   }
 > = () => {
   const [counter, setCounter] = state<number>(0);
-  return Fragment(
-    Tag("button", [Content("I'm a button")]),
-    myOtherTemplateNode()
-  );
+  return Fragment(Tag("button", ["I'm a button"]), myOtherTemplateNode());
 };
 
 renderNodes(document.body, Component(myTemplateNode));
 ```
 
-In this example, only `myTemplateNode` is generated as a `Component`: `myOtherTemplateNode`'s states will be linked to this context. This means, that calling an state update inside of `myOtherTemplateNode` will perform an update in the execution context (`myTemplateNode`).
+In this example, only `myTemplateNode` is generated as a `Component`: `myOtherTemplateNode`'s states will be linked to `myTemplateNode`'s context. This means, that calling an state update inside of `myOtherTemplateNode` will perform an update in the execution context (`myTemplateNode`), and hence, render its children again.
 
 ```ts
 import { Fragment, Tag, Content, state } from "nocta";
@@ -296,9 +310,9 @@ This allows you to choose how components should react to changes.
 
 **Important: don't forget that when a `Component` (or `Template`) is updated, all it's children will be updated too.**
 
-##### ¿What is a execution context?
+##### ¿What is an execution context?
 
-When a `Component` tree is generated, a `execution context` (the `Component`) is created and is accessible to all the subtree nodes unless another `Component` is generated. Once the tree is generated, the context is exited.
+When a `Component` tree is generated, an `execution context` (the `Component`) is created and is accessible to all the subtree nodes unless another `Component` is generated. Once the tree is generated, the context is exited.
 
 Nocta provides the reactivity inside of `Components` by the use of `states, effects, memory and contexts` that are joined to the the `execution context`.
 
@@ -339,6 +353,8 @@ The `state` allows to define values that exist in the component's life cycle and
 
 States are created with the `state` function. This returns and array with `getter` and `setter`, like `React`. A component has no state limits.
 
+**Must not be called inside conditionals.**
+
 ```ts
 const myTemplateNode = () => {
   const [userNeedsLogin, setUserNeedsLogin] = state<boolean>(false);
@@ -371,12 +387,11 @@ const myTemplateNode = () => {
 };
 ```
 
-Important: When a component updates its state, the repaint is managed automatically; calling `renderNodes` manually is not needed and can lead to inconcluences.
+Important: When a component updates its state, the repaint is managed automatically; calling `renderNodes` manually is not needed and can lead to errors.
 
 ### Effect
 
-An `effect` is a callback that gets executed when the node gets painted. This callback can return another one, that will get executed when the element is unpainted.
-An element can have multiple effects.
+An `effect` is a callback that gets executed when the node gets painted. This callback can return another one, that will get executed when the element is unpainted (clean-up).
 
 An effect is intended to be used when there is async work to do or actions that have to be fired after render.
 
@@ -389,7 +404,7 @@ const myTemplateNode = () => {
 
     return () => {
       // Callback return is optional
-      // Use it to perform a clean up
+      // Use it to perform a clean-up
       // Don't perform state updates inside
       console.log("I will get executed when unpainted");
     };
@@ -397,6 +412,8 @@ const myTemplateNode = () => {
 
   effect(() => {
     ...
+    // Effects can receive optional clean-ups
+    if (condition) return () => {}
   });
 
   return Tag("button", {
@@ -408,11 +425,11 @@ const myTemplateNode = () => {
 };
 ```
 
-Note: Effects will be executed in the order they are defined (FIFO).
+Note: There can be more than one effect, and will be executed in the order they are defined (FIFO), as well as clean-ups.
 
 #### Handeling effects
 
-Effects, unlike states, can be defined conditionally:
+Effects, unlike states or memory, can be defined conditionally:
 
 ```ts
 import { Tag, effect } from "nocta";
@@ -433,11 +450,11 @@ const myTemplateNode = () => {
 };
 ```
 
-Also performing state updates will perform an execution of the effects. You have to handle the execution flow and `memory` can help with that.
+Performing state updates will perform update, and hence an execution of the effects. You have to handle the execution flow and `memory` can help with that.
 
 ### Memory
 
-`Memory` allows you to store values during the component's lifecycle. Unlike states, changes in memory will not perform a repaint. It returns a `Holder<T>`:
+`Memory` allows you to store values during the component's lifecycle. Unlike states, changes in memory will not perform a repaint. It returns a `Nocta.Holder<T>` and is accesible via `.holds`:
 
 Memory can be used to control the `node's lifecycle logic`. For example, it can be used to choose wether an effect should run or not:
 
@@ -451,24 +468,31 @@ const myButtonEffectWithMemory = () => {
   }>();
 
   effect(() => {
-    if (loginMemory.holded.loginAttempts > 2) {
+    if (loginMemory.holds.loginAttempts > 2) {
       // Do something
-      // Don't forget that changing a memory value won't produce a repaint
-      // An state update would be neccessary in this case
+      // Don't forget that changing a memory value won't produce a repaint;
+      // an state update would be neccessary in this case
+      // or using `updater()` explained later on
     }
   });
   effect(() => {
-    if (!loginMemory.holded.userRefreshed) {
-      loginMemory.holded.userRefreshed = true;
-      // Refresh user
-      // If an state update runs later
+    if (!loginMemory.holds.userRefreshed) {
+      loginMemory.holds.userRefreshed = true;
+      // If an update runs later
       // Next render effect execution won't
       // get here: userRefreshed is true
     }
   });
+  // Alternatively, this can be defined conditionally:
+  if (!loginMemory.holds.userRefreshed)
+    effect(() => {
+      loginMemory.holds.userRefreshed = true;
+      ...
+    });
+
   return Tag("button", {
     onclick(v) {
-      loginMemory.holded.loginAttempts++;
+      loginMemory.holds.loginAttempts++;
       // This won't procude a repaint
     },
   });
@@ -477,7 +501,7 @@ const myButtonEffectWithMemory = () => {
 
 #### Getting an element's ref
 
-Memory must be used for `ref`. `ref` has been included in `v1.1.2` and it allows you to store a reference to the HTMLElement:
+`Memory` must be used to store the element's `ref`. `ref` allows you to store a reference to the HTMLElement:
 
 ```ts
 import { Tag, memory } from "nocta";
@@ -486,8 +510,8 @@ const myButtonMemoryRef = () => {
   const buttonRef = memory<HTMLButtonElement>();
 
   effect(() => {
-    if (buttonRef.holded) {
-      // buttonRef.holded contains the HTMLButtonElement reference
+    if (buttonRef.holds) {
+      // buttonRef.holds contains the HTMLButtonElement reference
     }
   });
   return Tag("button", {
@@ -496,209 +520,156 @@ const myButtonMemoryRef = () => {
 };
 ```
 
-### Context
+### Updater
+
+Sometimes, you need to update your node when you're not using state (which triggers nodes updates). You can use `updater`:
+
+```ts
+import { updater } from "nocta";
+
+let name = "Jhon";
+
+const TemplateWithUpdater = () => {
+  const update = updater();
+  return Tag(
+    "button",
+    {
+      onclick() {
+        name = "Doe";
+        update();
+        // Calling update() will queue an update for this node.
+        // As well as states, effect, memory... this is linked to the nearest context.
+      },
+    },
+    [`Name is: ${name}`]
+  );
+};
+```
+
+When painted:
+
+```html
+<!-- Before first click: -->
+<button>Jhon</button>
+<!-- After first click: -->
+<button>Doe</button>
+```
+
+### Contexts
 
 `Context` ease the sharing of data between `Components`.
 
-A context is defined by a class that extends `ContextLinker` and implements the context interface. This class is then used as a `Context template`.
+Contexts are classes, defined using the decorator `@Context` and extending `ContextHandler`. As well ass `updater()`, calling `this.update()` will perform an update in the context `consumers`:
 
 ```ts
-import { context, ContextLinker } from "nocta";
+import { Context, ContextHandler } from "nocta";
 
-interface CounterContext {
-  counter: number;
-  increase(): void;
-  decrease(): void;
-}
-
-class CounterContextTemplate extends ContextLinker implements CounterContext {
+@Context // IMPORTANT!
+class CounterContext extends ContextHandler {
   public counter = 0;
   public increase() {
     this.counter++;
-    this.update();
+    this.update(); // Performs udpate in consumers
   }
   public decrease() {
     this.counter--;
-    this.update();
+    this.update(); // Performs udpate in consumers
   }
 }
 ```
 
-This defines the structure of the context.
-`update` is provided by the extension from `ContextLinker` and it performs an update of all the consumers consuming this context; this lets you decide when components should update.
+#### Providing the context
 
-To be able to access this context from the components, you must create a `ContextLinker` using `contextWrapper`:
-
-```ts
-import { contextWrapper } from "nocta";
-
-const counterContextWrapper = contextWrapper<CounterContext>();
-```
-
-This is where the `Context template` will be generated and stored.
-
-Before the components consume this context, it has to be populated with `provide`. This generates the context using the template class and it gets linked to the `ContextWrapper`.
+Context is `provided` by instantiating the class. It will get linked to the `execution context`, meaning that will be avaiable from the `execution context` where is called to all of its children:
 
 ```ts
-import { provide } from "nocta";
-const App = () => {
-  provide(CounterContextTemplate, counterContextWrapper);
-  return Component(counterConsumerTemplate);
+const CounterContextProvider = () => {
+  new CounterContext();
+  return Tag("div",...);
+};
+
+// You can access the instance, but won't be a CONSUMER!
+const CounterContextProvider = () => {
+  const counterContext = new CounterContext();
+  console.log(counterContext.counter);
+  return Tag("div",...);
 };
 ```
 
-Then a component can use `consume`:
+#### Consumption
+
+Context consumption is done via `consume` and specifying the context classes. The context has to be provided before and the consumer has to be in the same tree:
 
 ```ts
-import { consume } from "nocta";
-const counterConsumerTemplate = () => {
-  const counterContext = consume(counterContextWrapper);
-  return Content(`The counter is ${counterContext.counter}`);
+import { consume, Tag } from "nocta";
+
+const CounterContextConsumer = () => {
+  const [counterContext] = consume(CounterContext);
+  return Tag("div",...);
+};
+
+// Consume returns an array with the give contexts
+const CounterContextConsumer = () => {
+  const [counterContext, serviceContext] = consume(
+    CounterContext,
+    ServiceContext
+  );
+  return Tag("div",...);
 };
 ```
 
-As `states`, context `consumers` need an `execution context`. They have to be wrapped inside of a `Component`. If they're not wrapped, they will be linked to the nearest execution context or `throw an error if there is not one`. There's no need of an `execution context` to `provide` a context.
-
-A context linker can be cleared using `clearWrapper`. This can be called when a `ContextLinker` will no longer be used (if it is used later, you will need to call `provide` again before using it).
-
-`ContextWrapper` can be defined anywhere. You can use them even inside of templates (you must handle the context destruction):
+You can also consume a `context` from a `context` using `this.link(...)`, similar to `consume`:
 
 ```ts
-import {
-  provide,
-  consume,
-  contextWrapper,
-  Content,
-  Component,
-  renderNodes,
-} from "nocta";
 
-const counterConsumerTemplate: Nocta.Template<
-  Nocta.Tag<"div">,
-  { counterLinker: Nocta.ContextLinker<CounterContext> }
-> = () => {
-  const counterContext = consume(counterContextWrapper);
-  return Tag("div", [
-    Tag(
-      "button",
-      {
-        onclick() {
-          counterContext.increase();
-        },
-      },
-      [Content("Increase")]
-    ),
-    Tag(
-      "button",
-      {
-        onclick() {
-          counterContext.decrease();
-        },
-      },
-      [Content("Decrease")]
-    ),
-    Content(`The counter is ${counterContext.counter}`),
-  ]);
-};
-const App = () => {
-  const counterContextWrapper = contextWrapper<CounterContext>();
-  provide(CounterContextTemplate, counterContextWrapper);
-  effect(() => {
-    return () => {
-      clearWrapper(counterContextWrapper); // Destroy the linker when this component unmounts
-      // This will delete it's data and will be marked as destroyed
-    };
-  });
-  return Component(counterConsumerTemplate, { counterLinker });
-};
-renderNodes(document.body!, Component(App));
-```
-
-#### onProvide and onDestroy
-
-When providing your `Context` it may need arguments; they can be passed through the `provide` function and they are defined by the `ContextLinker` generic:
-
-```ts
-class CounterContextTemplate
-  extends ContextLinker<{ initialCounter: number }>
-  implements CounterContext
-{
-  public counter = 0;
-  public onProvide: ((args: { initialCounter: number }) => void) | undefined = (
-    args
-  ) => {
-    this.counter = args.initialCounter;
-  };
-  public increase() {
-    this.counter++;
-    this.update();
-  }
-  public decrease() {
-    this.counter--;
-    this.update();
+@Context // IMPORTANT!
+class RouterContext extends ContextHandler {
+  public navigate() {
+    ...
   }
 }
 
-provide(CounterContextTemplate, counterContextWrapper, { initialCounter: 100 });
-```
-
-In the same way, when you need to perform some clean-up when the `Context` is destroyed with `clearWrapper`, use `onDestroy`:
-
-```ts
-class CounterContextTemplate
-  extends ContextLinker<{ initialCounter: number }>
-  implements CounterContext
-{
-  public counter = 0;
-  public onDestroy: VoidFunction | undefined = () => {
-    // Perform a clean-up
-  };
-  public increase() {
-    this.counter++;
-    this.update();
-  }
-  public decrease() {
-    this.counter--;
-    this.update();
-  }
-}
-```
-
-#### Provide and Consume
-
-When providing context, you can provide arguments. The fourth last arguments is forcing `provide`. `provide` does not overwrite a context if it's already defined, pass this argument if you want to overwrite.
-
-Sometimes you need to consume a `Context` inside a `Contex Template` or `Component` but avoiding the subscription. You can call `consume` providing a second argument, which defines if the `execution context` has to be linked or not (`true` by default). Passing false will let you access the data from the `Context` and without subscribing. Inside of contexts there is no execution context; if consuming, always pass the second argument `false`.
-
-```ts
-class CounterContextTemplate extends ContextLinker implements CounterContext {
+@Context // IMPORTANT!
+class CounterContext extends ContextHandler {
   public counter = 0;
   public increase() {
-    const anotherContext = consume(anotherLinker, false);
+    const [routerContext] = this.link(RouterContext);
+    // If more than one is needed:
+    const [routerContext,serviceContext] = this.link(RouterContext,ServiceContext);
     this.counter++;
-    this.update();
+    this.update(); // Performs udpate in consumers
   }
   public decrease() {
     this.counter--;
-    this.update();
+    this.update(); // Performs udpate in consumers
   }
 }
 ```
 
-`Contexts` can be also used outside of components or other contexts, as long as the context has been provided:
+Additionally, you can also `consume` contexts from a template (component) without registering as a consumer using `link()`. Call it the same way as `consume`:
 
 ```ts
-function doWatheverOutsideContext() {
-  const myContext = consume(contextLinker, false);
-  ...
-}
+import { link } from "nocta";
+
+// This template (component) won't be updated when those contexts change
+// Usefull when you don't want to suscribe but need access to the context
+const CounterContextConsumer = () => {
+  const [counterContext, serviceContext] = link(
+    CounterContext,
+    ServiceContext
+  );
+  return Tag("div",...);
+};
 ```
+
+**Important:**
+Contexts are class instances. When using it, avoid destructure.
 
 ---
 
 #### Additional
 
-You can also define custom functions that use state, effect, memo or context to use in your template function (don't forget of wrapping it inside Component() or it's context parent):
+You can also define custom functions that use state, effect, memo or context to use in your template function (don't forget of wrapping with `Component()` when using reactive templates):
 
 ```ts
 // hook.ts
@@ -727,4 +698,7 @@ export const UserTemplate: Nocta.Template<Tag<"div">> = () => {
       : Tag("p", [Content("No user found")]),
   ]);
 };
+// app.ts
+import { UserTemplate } from "./components";
+renderNodes(document.body!, Component(UserTemplate));
 ```
